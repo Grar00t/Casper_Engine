@@ -169,17 +169,49 @@ typedef struct {
     bool         generate_proof;/* compute proof hash */
 } NiyahHybridOpts;
 
+/* Why generation produced — or failed to produce — an output.
+ *
+ * A total rejection used to be papered over with the literal string
+ * "[Output rejected]", which is indistinguishable from a model that
+ * genuinely emitted that text. The verdict is now reported out of
+ * band, so a caller can tell verification failure from content. */
+typedef enum {
+    NIYAH_HYBRID_OK = 0,            /* passed KHZ_Q and all rules       */
+    NIYAH_HYBRID_RULE_REPLACED,     /* a rule substituted the output    */
+    NIYAH_HYBRID_RULE_REJECTED,     /* rule verdict REJECTED, no text   */
+    NIYAH_HYBRID_KHZ_INCOHERENT,    /* every attempt failed the SVD gate*/
+    NIYAH_HYBRID_ERR_DECODE         /* tokenizer produced nothing usable*/
+} NiyahHybridOutcome;
+
+typedef struct {
+    NiyahHybridOutcome outcome;
+    uint32_t    attempts;         /* attempts actually consumed          */
+    float       khz_energy;       /* energy_preserved of the last attempt*/
+    float       khz_penalty_nasl; /* nasl penalty of the last attempt    */
+    const char *rule_violation;   /* borrowed from the rule KB, or NULL  */
+} NiyahHybridStatus;
+
 /*
  * Generate text with optional symbolic verification.
  *
- * Returns malloc'd string (caller frees).
- * If proof_out is non-NULL, 32-byte SHA-256 hash is written there.
+ * Returns a malloc'd string (caller frees) for NIYAH_HYBRID_OK and
+ * NIYAH_HYBRID_RULE_REPLACED. Returns NULL for every rejection
+ * outcome: NULL means "no output survived verification" and must not
+ * be smoothed over with substitute text.
+ *
+ * status_out, when non-NULL, always receives the outcome — including
+ * on success. proof_out, when non-NULL, receives a 32-byte SHA-256
+ * hash, and is only written when text was actually produced.
  * If no rules are provided, runs pure neural generation.
  */
 char *niyah_hybrid_generate(NiyahModel *m, const char *prompt,
                             const NiyahHybridOpts *opts,
                             NiyahSampler *sampler,
-                            uint8_t proof_out[32]);
+                            uint8_t proof_out[32],
+                            NiyahHybridStatus *status_out);
+
+/* Stable, human-readable outcome name. Static storage, never NULL. */
+const char *niyah_hybrid_outcome_str(NiyahHybridOutcome o);
 
 #ifdef __cplusplus
 }

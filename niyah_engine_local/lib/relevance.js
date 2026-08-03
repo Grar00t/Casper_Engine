@@ -6,6 +6,8 @@
    No neural networks. No hallucination. Pure math.
    ══════════════════════════════════════════════════════════════════ */
 
+const { stem } = require('./stem');
+
 const STOPWORDS = new Set([
   // English
   'the','a','an','is','are','was','were','of','to','in','on','for','and','or',
@@ -43,6 +45,21 @@ function tokenize(text) {
     .normalize('NFKC')
     .replace(/[\u064B-\u065F\u0670\u0640]/g, '') // strip tashkeel + tatweel
     .match(/[\p{L}\p{N}]+/gu) || [];
+}
+
+/* ── Tokenize + morphological reduction + stopword removal ──
+   This is the token stream every statistical stage consumes. Stemming
+   here (rather than per-callsite) guarantees the BM25 index, the
+   TextRank graph and the MMR redundancy check all share one vocabulary
+   — otherwise their scores are not comparable. */
+function stemTokens(text) {
+  const out = [];
+  for (const t of tokenize(text)) {
+    if (t.length < 2 || STOPWORDS.has(t)) continue;
+    const s = stem(t);
+    if (s && s.length >= 2 && !STOPWORDS.has(s)) out.push(s);
+  }
+  return out;
 }
 
 function termFrequencies(tokens) {
@@ -125,6 +142,6 @@ function extractTopSentences(query, longText, n = 3) {
 }
 
 module.exports = {
-  tokenize, termFrequencies, cosineSim, rankByRelevance,
+  tokenize, stemTokens, termFrequencies, cosineSim, rankByRelevance,
   splitSentences, extractTopSentences, detectLang, dedup, isJunk,
 };

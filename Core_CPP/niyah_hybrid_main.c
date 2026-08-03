@@ -77,11 +77,31 @@ static uint32_t generate_tokens(NiyahModel *m, const uint32_t *prompt_tokens,
     return n_out;
 }
 
+const char *niyah_hybrid_outcome_str(NiyahHybridOutcome o) {
+    switch (o) {
+        case NIYAH_HYBRID_OK:             return "ok";
+        case NIYAH_HYBRID_RULE_REPLACED:  return "rule_replaced";
+        case NIYAH_HYBRID_RULE_REJECTED:  return "rule_rejected";
+        case NIYAH_HYBRID_KHZ_INCOHERENT: return "khz_incoherent";
+        case NIYAH_HYBRID_ERR_DECODE:     return "decode_error";
+        default:                          return "unknown";
+    }
+}
+
 char *niyah_hybrid_generate(NiyahModel *m, const char *prompt,
                             const NiyahHybridOpts *opts,
                             NiyahSampler *sampler,
-                            uint8_t proof_out[32])
+                            uint8_t proof_out[32],
+                            NiyahHybridStatus *status_out)
 {
+    /* Status is populated on every exit path, so a caller that only
+     * inspects status_out never has to infer the reason from a string. */
+    NiyahHybridStatus st = {
+        .outcome = NIYAH_HYBRID_KHZ_INCOHERENT,
+        .attempts = 0, .khz_energy = 0.f,
+        .khz_penalty_nasl = 0.f, .rule_violation = NULL,
+    };
+
     tokenizer_init();
 
     /* Encode prompt */
@@ -106,9 +126,17 @@ char *niyah_hybrid_generate(NiyahModel *m, const char *prompt,
         uint32_t n_out = generate_tokens(m, prompt_tokens, prompt_len,
                                          out_tokens, 512, sampler);
 
+        st.attempts = attempt + 1;
+
         /* Decode to text */
         char *text = tokenizer_decode(out_tokens, n_out);
-        if (!text) { text = malloc(1); text[0] = '\0'; }
+        if (!text) {
+            /* Allocation failure is a hard error, not an empty answer. */
+            st.outcome = NIYAH_HYBRID_ERR_DECODE;
+            if (status_out) *status_out = st;
+            tokenizer_free();
+            return NULL;
+        }
 
         /* ── KHZ_Q Ethical Prism: SVD Verify step ─────────────────────────
          * Applied BEFORE rule_parser — mathematical coherence gate.
@@ -118,7 +146,10 @@ char *niyah_hybrid_generate(NiyahModel *m, const char *prompt,
          * If energy < 85% OR penalty_nasl >= 1.0 → Re-sample.
          * ---------------------------------------------------------------- */
         KHZQ_Result khz = khz_q_verify_output(text, 0.85f);
+        st.khz_energy       = khz.energy_preserved;
+        st.khz_penalty_nasl = khz.penalty_nasl;
         if (!khz.is_coherent) {
+            st.outcome = NIYAH_HYBRID_KHZ_INCOHERENT;
             fprintf(stderr,
                     "[KHZ_Q] Reject attempt %u/%u — "
                     "energy=%.3f penalty_nasl=%.3f chi_e=%d\n",

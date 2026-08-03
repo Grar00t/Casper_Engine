@@ -4,9 +4,19 @@ const express = require('express');
 const { execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const { NiyahEngine } = require('../lib/niyahEngine');
+const { NiyahEngine, STATUS } = require('../lib/niyahEngine');
 
 const router = express.Router();
+
+const STATUS_HTTP = {
+  [STATUS.OK]: 200,
+  [STATUS.MEMORY_HIT]: 200,
+  [STATUS.EMPTY_QUERY]: 400,
+  [STATUS.SEARCH_UNAVAILABLE]: 503,
+  [STATUS.NO_RESULTS]: 404,
+  [STATUS.FETCH_FAILED]: 502,
+  [STATUS.NO_RELEVANT_TEXT]: 422,
+};
 
 const engine = new NiyahEngine({
   searxngBaseUrl: process.env.SEARXNG_BASE_URL,
@@ -54,8 +64,10 @@ const DEFAULT_RULES = (() => {
 function c11Audit(prompt, text, rules) {
   return new Promise((resolve) => {
     if (!C11_EXE) {
-      console.warn('[c11] niyah_hybrid.exe not found — skipping audit');
-      return resolve(null);
+      // "unavailable" is not "failed" — the caller must be able to tell
+      // an unbuilt binary apart from an answer that flunked the rules.
+      return resolve({ audited: false, reason: 'binary_not_found',
+                       detail: 'niyah_hybrid.exe not present; build Core_CPP to enable proofs' });
     }
 
     const payload = JSON.stringify({
@@ -70,17 +82,25 @@ function c11Audit(prompt, text, rules) {
       { timeout: 8000, maxBuffer: 65536 },
       (err, stdout, stderr) => {
         if (err) {
-          console.error('[c11] audit error:', err.message);
+          console.error('[c11] audit process error:', err.message);
           if (stderr) console.error('[c11] stderr:', stderr.substring(0, 200));
-          return resolve(null);
+          return resolve({
+            audited: false,
+            reason: err.killed ? 'timeout' : 'process_error',
+            detail: err.message,
+          });
         }
         try {
           const result = JSON.parse(stdout.trim());
+          if (typeof result.verified !== 'boolean') {
+            return resolve({ audited: false, reason: 'malformed_output',
+                             detail: 'auditor did not return a boolean `verified`' });
+          }
           console.log(`[c11] verified=${result.verified} conf=${result.confidence} hash=${(result.chain_hash||'').substring(0,12)}...`);
-          resolve(result);
+          resolve({ audited: true, ...result });
         } catch (parseErr) {
           console.error('[c11] JSON parse error:', parseErr.message, '| raw:', stdout.substring(0, 100));
-          resolve(null);
+          resolve({ audited: false, reason: 'unparseable_output', detail: parseErr.message });
         }
       }
     );
@@ -96,41 +116,60 @@ router.post('/ask', async (req, res) => {
     return res.status(400).json({ error: 'query مطلوب.' });
   }
   try {
-    /* Step 1: Node.js NIYAH pipeline (DDG search → fetch → TF-IDF → cite) */
+    /* Step 1: extractive pipeline — search → BM25 → TextRank → MMR → compose */
     const result = await engine.ask(query, { forceFresh: Boolean(forceFresh) });
 
-    /* Step 2: C11 symbolic audit + SHA-256 proof (non-blocking fallback) */
-    let c11 = null;
-    if (result.answer && result.answer.length > 10) {
-      c11 = await c11Audit(query, result.answer);
-    }
-
-    /* Merge: if C11 audit ran, use its verified confidence + chain_hash */
-    if (c11) {
-      result.proof_verified  = c11.verified;
-      result.chain_hash      = c11.chain_hash;
-      result.khz_energy      = c11.khz_energy;
-      result.rule_violation  = c11.rule_violation || null;
-      /* Take minimum of both confidences — conservative & honest */
-      if (typeof c11.confidence === 'number') {
-        result.confidence = Math.min(result.confidence || 0, c11.confidence);
-      }
-      result.c11_elapsed_ms = c11.elapsed_ms;
+    /* Step 2: C11 symbolic audit + SHA-256 chain hash.
+     * The audit is only meaningful over a real answer, so a short or
+     * failed answer is reported as `not_applicable` rather than being
+     * silently stamped unverified. */
+    let audit;
+    if (result.answer && result.answer.length > 10 && result.citations.length > 0) {
+      audit = await c11Audit(query, result.answer);
     } else {
-      result.proof_verified = false;
-      result.chain_hash     = null;
+      audit = { audited: false, reason: 'not_applicable',
+                detail: 'no citable answer to audit' };
     }
 
-    return res.json(result);
+    if (audit.audited) {
+      result.proof = {
+        status: audit.verified ? 'verified' : 'rejected',
+        verified: audit.verified,
+        chain_hash: audit.chain_hash || null,
+        khz_energy: audit.khz_energy,
+        rule_violation: audit.rule_violation || null,
+        elapsed_ms: audit.elapsed_ms,
+        auditor: C11_EXE,
+      };
+      /* Conservative merge: the answer is only as trustworthy as the
+       * weaker of the statistical and symbolic assessments. */
+      if (typeof audit.confidence === 'number') {
+        result.confidence = Math.min(result.confidence ?? 0, audit.confidence);
+      }
+    } else {
+      result.proof = {
+        status: 'unavailable',
+        verified: null,          // null ≠ false: we did not check.
+        reason: audit.reason,
+        detail: audit.detail,
+        chain_hash: null,
+      };
+    }
+
+    const code = STATUS_HTTP[result.status] ?? 200;
+    return res.status(code).json(result);
   } catch (err) {
     console.error('[niyah/ask] error:', err);
-    return res.status(500).json({ error: 'فشل داخلي.', details: err.message });
+    return res.status(500).json({ status: 'internal_error', error: err.message });
   }
 });
 
 router.get('/health', (req, res) => res.json({
   status: 'ok',
-  searchBackend: engine.search.searxngBaseUrl ? 'searxng' : (engine.search.braveApiKey ? 'brave' : 'duckduckgo_html'),
+  engine: 'niyah-math-v5',
+  externalInference: false,
+  pretrainedWeights: false,
+  searchBackend: engine.backendName,
   memoryBackend: engine.memory.useSqlite ? 'sqlite' : 'json',
   c11Auditor: C11_EXE ? { available: true, path: C11_EXE } : { available: false },
   defaultRules: DEFAULT_RULES || null,
