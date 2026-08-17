@@ -66,19 +66,15 @@ else
 fi
 
 build_c() {
-    local out="$1"
-    shift
+    local out="$1"; shift
     "$CC" $OPT $ARCH_FLAGS $WARN "$@" -o "$out" $LDFLAGS
     [[ -s "$out" ]] || { echo "[build_gcc] artifact missing/empty: $out" >&2; return 1; }
 }
 
 run_checked() {
-    local bin="$1"
-    shift
-    [[ -f "$bin" ]] || { echo "[build_gcc] executable missing: $bin" >&2; return 1; }
+    local bin="$1"; shift
+    [[ -x "$bin" || -f "$bin" ]] || { echo "[build_gcc] executable missing: $bin" >&2; return 1; }
     "$bin" "$@"
-    local rc=$?
-    [[ $rc -eq 0 ]] || { echo "[build_gcc] execution failed: $bin exit=$rc" >&2; return "$rc"; }
 }
 
 NIYAH_OUT="$ROOT/Core_CPP/niyah"
@@ -98,15 +94,11 @@ fi
 
 if [[ "$RUN_LINT" == "1" ]]; then
     command -v cppcheck >/dev/null 2>&1 || { echo "[build_gcc] cppcheck unavailable" >&2; exit 1; }
-    cppcheck --enable=warning,style,performance,portability --error-exitcode=1 \
-        --suppress=missingIncludeSystem --suppress=unusedFunction --std=c11 \
-        -I "$ROOT/include" \
-        "$ROOT/Core_CPP/niyah_core.c" "$ROOT/Core_CPP/niyah_main.c" \
-        "$ROOT/Core_CPP/niyah_train.c" "$ROOT/Core_CPP/niyah_hybrid_main.c" \
-        "$ROOT/Core_CPP/casper_cli.c" "$ROOT/Core_CPP/casper_rag.c" \
-        "$ROOT/Core_CPP/rule_parser.c" "$ROOT/Core_CPP/proof_generator.c" \
-        "$ROOT/Core_CPP/constraint_solver.c" "$ROOT/Core_CPP/hybrid_reasoner.c" \
-        "$ROOT/Core_CPP/khz_q_svd.c"
+    cppcheck --enable=warning,style,performance,portability --error-exitcode=1 --suppress=missingIncludeSystem --suppress=unusedFunction --std=c11 -I "$ROOT/include" \
+        "$ROOT/Core_CPP/niyah_core.c" "$ROOT/Core_CPP/niyah_main.c" "$ROOT/Core_CPP/niyah_train.c" \
+        "$ROOT/Core_CPP/niyah_hybrid_main.c" "$ROOT/Core_CPP/casper_cli.c" "$ROOT/Core_CPP/casper_rag.c" \
+        "$ROOT/Core_CPP/rule_parser.c" "$ROOT/Core_CPP/proof_generator.c" "$ROOT/Core_CPP/constraint_solver.c" \
+        "$ROOT/Core_CPP/hybrid_reasoner.c" "$ROOT/Core_CPP/khz_q_svd.c"
 fi
 
 if [[ "$RUN_SMOKE" == "1" ]]; then
