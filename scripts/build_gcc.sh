@@ -26,22 +26,16 @@ RUN_BENCH="${RUN_BENCH:-0}"
 
 if [[ -n "$CC_OVERRIDE" ]]; then
     CC="$CC_OVERRIDE"
-    case "$CC" in
-        *clang*) CXX="${CC/clang/clang++}" ;;
-        *gcc*) CXX="${CC/gcc/g++}" ;;
-        *) CXX="g++" ;;
-    esac
 elif command -v gcc >/dev/null 2>&1; then
-    CC=gcc; CXX=g++
+    CC=gcc
 elif command -v clang >/dev/null 2>&1; then
-    CC=clang; CXX=clang++
+    CC=clang
 else
     echo "[build_gcc] no C compiler found (gcc/clang)" >&2
     exit 1
 fi
 
 command -v "$CC" >/dev/null 2>&1 || { echo "[build_gcc] compiler unavailable: $CC" >&2; exit 1; }
-command -v "$CXX" >/dev/null 2>&1 || { echo "[build_gcc] C++ compiler unavailable: $CXX" >&2; exit 1; }
 
 if [[ -n "$FORCE_ARCH" ]]; then
     ARCH="$FORCE_ARCH"
@@ -75,7 +69,8 @@ else
 fi
 
 build_c() {
-    local out="$1"; shift
+    local out="$1"
+    shift
     "$CC" $OPT $ARCH_FLAGS $WARN "$@" -o "$out" $LDFLAGS
     [[ -s "$out" ]] || { echo "[build_gcc] artifact missing/empty: $out" >&2; return 1; }
 }
@@ -142,20 +137,8 @@ if [[ "$RUN_LINT" == "1" ]]; then
 fi
 
 if [[ "$RUN_SMOKE" == "1" ]]; then
-    if "$NIYAH_OUT"; then
-        :
-    else
-        smoke_exit=$?
-        echo "[build_gcc] smoke failed: exit $smoke_exit" >&2
-        exit "$smoke_exit"
-    fi
-    if "$HYBRID_OUT" --smoke; then
-        :
-    else
-        smoke_exit=$?
-        echo "[build_gcc] hybrid smoke failed: exit $smoke_exit" >&2
-        exit "$smoke_exit"
-    fi
+    if "$NIYAH_OUT"; then :; else smoke_exit=$?; echo "[build_gcc] smoke failed: exit $smoke_exit" >&2; exit "$smoke_exit"; fi
+    if "$HYBRID_OUT" --smoke; then :; else smoke_exit=$?; echo "[build_gcc] hybrid smoke failed: exit $smoke_exit" >&2; exit "$smoke_exit"; fi
 fi
 
 if [[ "$RUN_BENCH" == "1" ]]; then
@@ -165,11 +148,7 @@ fi
 
 for art in "$NIYAH_OUT" "$TRAIN_OUT" "$HYBRID_OUT" "$CASPER_OUT"; do
     [[ -s "$art" ]] || { echo "[build_gcc] required artifact missing: $art" >&2; exit 1; }
-    if command -v sha256sum >/dev/null 2>&1; then
-        sha256sum "$art"
-    else
-        shasum -a 256 "$art"
-    fi
+    if command -v sha256sum >/dev/null 2>&1; then sha256sum "$art"; else shasum -a 256 "$art"; fi
 done
 
 echo "[build_gcc] BUILD PASS (exit 0; required artifacts verified)."
