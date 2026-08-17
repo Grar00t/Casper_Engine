@@ -72,12 +72,13 @@ build_c() {
     [[ -s "$out" ]] || { echo "[build_gcc] artifact missing/empty: $out" >&2; return 1; }
 }
 
-run_smoke() {
+run_checked() {
     local bin="$1"
-    [[ -x "$bin" || -f "$bin" ]] || { echo "[build_gcc] smoke artifact missing: $bin" >&2; return 1; }
-    "$bin"
+    shift
+    [[ -f "$bin" ]] || { echo "[build_gcc] executable missing: $bin" >&2; return 1; }
+    "$bin" "$@"
     local rc=$?
-    [[ $rc -eq 0 ]] || { echo "[build_gcc] smoke failed: $bin exit=$rc" >&2; return "$rc"; }
+    [[ $rc -eq 0 ]] || { echo "[build_gcc] execution failed: $bin exit=$rc" >&2; return "$rc"; }
 }
 
 NIYAH_OUT="$ROOT/Core_CPP/niyah"
@@ -109,15 +110,13 @@ if [[ "$RUN_LINT" == "1" ]]; then
 fi
 
 if [[ "$RUN_SMOKE" == "1" ]]; then
-    run_smoke "$NIYAH_OUT"
-    run_smoke "$HYBRID_OUT" --smoke
+    run_checked "$NIYAH_OUT"
+    run_checked "$HYBRID_OUT" --smoke
 fi
 
 if [[ "$RUN_BENCH" == "1" ]]; then
     [[ -s "$BENCH_OUT" ]] || { echo "[build_gcc] benchmark artifact missing" >&2; exit 1; }
-    "$BENCH_OUT"
-    bench_exit=$?
-    [[ $bench_exit -eq 0 ]] || { echo "[build_gcc] benchmark failed: exit $bench_exit" >&2; exit "$bench_exit"; }
+    run_checked "$BENCH_OUT"
 fi
 
 for art in "$NIYAH_OUT" "$TRAIN_OUT" "$HYBRID_OUT" "$CASPER_OUT"; do
