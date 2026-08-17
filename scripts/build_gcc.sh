@@ -5,6 +5,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="release"
 FORCE_ARCH=""
 CC_OVERRIDE=""
+RUN_LINT="${RUN_LINT:-0}"
+RUN_SMOKE="${RUN_SMOKE:-0}"
+RUN_BENCH="${RUN_BENCH:-0}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -20,10 +23,6 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-RUN_LINT="${RUN_LINT:-0}"
-RUN_SMOKE="${RUN_SMOKE:-0}"
-RUN_BENCH="${RUN_BENCH:-0}"
-
 if [[ -n "$CC_OVERRIDE" ]]; then
     CC="$CC_OVERRIDE"
 elif command -v gcc >/dev/null 2>&1; then
@@ -34,7 +33,6 @@ else
     echo "[build_gcc] no C compiler found (gcc/clang)" >&2
     exit 1
 fi
-
 command -v "$CC" >/dev/null 2>&1 || { echo "[build_gcc] compiler unavailable: $CC" >&2; exit 1; }
 
 if [[ -n "$FORCE_ARCH" ]]; then
@@ -55,7 +53,6 @@ case "$ARCH" in
 esac
 
 WARN="-Wall -Wextra -Werror -Wstrict-prototypes -Wmissing-prototypes -Wcast-align -Wwrite-strings -Wshadow -pedantic"
-
 if [[ "$CONFIG" == "release" ]]; then
     OPT="-O3 -DNDEBUG"
     LDFLAGS="-lm -flto"
@@ -75,75 +72,52 @@ build_c() {
     [[ -s "$out" ]] || { echo "[build_gcc] artifact missing/empty: $out" >&2; return 1; }
 }
 
+run_smoke() {
+    local bin="$1"
+    [[ -x "$bin" || -f "$bin" ]] || { echo "[build_gcc] smoke artifact missing: $bin" >&2; return 1; }
+    "$bin"
+    local rc=$?
+    [[ $rc -eq 0 ]] || { echo "[build_gcc] smoke failed: $bin exit=$rc" >&2; return "$rc"; }
+}
+
 NIYAH_OUT="$ROOT/Core_CPP/niyah"
 TRAIN_OUT="$ROOT/Core_CPP/trainer"
 HYBRID_OUT="$ROOT/Core_CPP/niyah_hybrid"
 BENCH_OUT="$ROOT/Core_CPP/bench_niyah"
 CASPER_OUT="$ROOT/Core_CPP/casper"
 
-build_c "$NIYAH_OUT" \
-    "$ROOT/Core_CPP/niyah_core.c" \
-    "$ROOT/Core_CPP/niyah_main.c"
-
-build_c "$TRAIN_OUT" \
-    "$ROOT/Core_CPP/niyah_train.c" \
-    "$ROOT/Core_CPP/niyah_core.c" \
-    "$ROOT/tokenizer.c"
-
-build_c "$HYBRID_OUT" \
-    "$ROOT/Core_CPP/niyah_hybrid_main.c" \
-    "$ROOT/Core_CPP/niyah_core.c" \
-    "$ROOT/Core_CPP/hybrid_reasoner.c" \
-    "$ROOT/Core_CPP/constraint_solver.c" \
-    "$ROOT/Core_CPP/rule_parser.c" \
-    "$ROOT/Core_CPP/proof_generator.c" \
-    "$ROOT/Core_CPP/khz_q_svd.c" \
-    "$ROOT/Core_CPP/casper_rag.c" \
-    "$ROOT/tokenizer.c"
-
-build_c "$CASPER_OUT" \
-    "$ROOT/Core_CPP/casper_cli.c" \
-    "$ROOT/Core_CPP/casper_rag.c" \
-    "$ROOT/Core_CPP/rule_parser.c" \
-    "$ROOT/Core_CPP/proof_generator.c" \
-    "$ROOT/Core_CPP/khz_q_svd.c"
+build_c "$NIYAH_OUT" "$ROOT/Core_CPP/niyah_core.c" "$ROOT/Core_CPP/niyah_main.c"
+build_c "$TRAIN_OUT" "$ROOT/Core_CPP/niyah_train.c" "$ROOT/Core_CPP/niyah_core.c" "$ROOT/tokenizer.c"
+build_c "$HYBRID_OUT" "$ROOT/Core_CPP/niyah_hybrid_main.c" "$ROOT/Core_CPP/niyah_core.c" "$ROOT/Core_CPP/hybrid_reasoner.c" "$ROOT/Core_CPP/constraint_solver.c" "$ROOT/Core_CPP/rule_parser.c" "$ROOT/Core_CPP/proof_generator.c" "$ROOT/Core_CPP/khz_q_svd.c" "$ROOT/Core_CPP/casper_rag.c" "$ROOT/tokenizer.c"
+build_c "$CASPER_OUT" "$ROOT/Core_CPP/casper_cli.c" "$ROOT/Core_CPP/casper_rag.c" "$ROOT/Core_CPP/rule_parser.c" "$ROOT/Core_CPP/proof_generator.c" "$ROOT/Core_CPP/khz_q_svd.c"
 
 if [[ -f "$ROOT/Core_CPP/bench_niyah.c" ]]; then
-    build_c "$BENCH_OUT" \
-        "$ROOT/Core_CPP/bench_niyah.c" \
-        "$ROOT/Core_CPP/niyah_core.c"
+    build_c "$BENCH_OUT" "$ROOT/Core_CPP/bench_niyah.c" "$ROOT/Core_CPP/niyah_core.c"
 fi
 
 if [[ "$RUN_LINT" == "1" ]]; then
     command -v cppcheck >/dev/null 2>&1 || { echo "[build_gcc] cppcheck unavailable" >&2; exit 1; }
-    cppcheck \
-        --enable=warning,style,performance,portability \
-        --error-exitcode=1 \
-        --suppress=missingIncludeSystem \
-        --suppress=unusedFunction \
-        --std=c11 \
+    cppcheck --enable=warning,style,performance,portability --error-exitcode=1 \
+        --suppress=missingIncludeSystem --suppress=unusedFunction --std=c11 \
         -I "$ROOT/include" \
-        "$ROOT/Core_CPP/niyah_core.c" \
-        "$ROOT/Core_CPP/niyah_main.c" \
-        "$ROOT/Core_CPP/niyah_train.c" \
-        "$ROOT/Core_CPP/niyah_hybrid_main.c" \
-        "$ROOT/Core_CPP/casper_cli.c" \
-        "$ROOT/Core_CPP/casper_rag.c" \
-        "$ROOT/Core_CPP/rule_parser.c" \
-        "$ROOT/Core_CPP/proof_generator.c" \
-        "$ROOT/Core_CPP/constraint_solver.c" \
-        "$ROOT/Core_CPP/hybrid_reasoner.c" \
+        "$ROOT/Core_CPP/niyah_core.c" "$ROOT/Core_CPP/niyah_main.c" \
+        "$ROOT/Core_CPP/niyah_train.c" "$ROOT/Core_CPP/niyah_hybrid_main.c" \
+        "$ROOT/Core_CPP/casper_cli.c" "$ROOT/Core_CPP/casper_rag.c" \
+        "$ROOT/Core_CPP/rule_parser.c" "$ROOT/Core_CPP/proof_generator.c" \
+        "$ROOT/Core_CPP/constraint_solver.c" "$ROOT/Core_CPP/hybrid_reasoner.c" \
         "$ROOT/Core_CPP/khz_q_svd.c"
 fi
 
 if [[ "$RUN_SMOKE" == "1" ]]; then
-    if "$NIYAH_OUT"; then :; else smoke_exit=$?; echo "[build_gcc] smoke failed: exit $smoke_exit" >&2; exit "$smoke_exit"; fi
-    if "$HYBRID_OUT" --smoke; then :; else smoke_exit=$?; echo "[build_gcc] hybrid smoke failed: exit $smoke_exit" >&2; exit "$smoke_exit"; fi
+    run_smoke "$NIYAH_OUT"
+    run_smoke "$HYBRID_OUT" --smoke
 fi
 
 if [[ "$RUN_BENCH" == "1" ]]; then
     [[ -s "$BENCH_OUT" ]] || { echo "[build_gcc] benchmark artifact missing" >&2; exit 1; }
-    if "$BENCH_OUT"; then :; else bench_exit=$?; echo "[build_gcc] benchmark failed: exit $bench_exit" >&2; exit "$bench_exit"; fi
+    "$BENCH_OUT"
+    bench_exit=$?
+    [[ $bench_exit -eq 0 ]] || { echo "[build_gcc] benchmark failed: exit $bench_exit" >&2; exit "$bench_exit"; }
 fi
 
 for art in "$NIYAH_OUT" "$TRAIN_OUT" "$HYBRID_OUT" "$CASPER_OUT"; do
