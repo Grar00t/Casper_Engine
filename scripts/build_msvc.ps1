@@ -6,7 +6,6 @@
 param(
     [ValidateSet('x64','arm64','auto')]
     [string]$Arch = 'auto',
-
     [ValidateSet('Debug','Release')]
     [string]$Config = 'Release'
 )
@@ -23,23 +22,19 @@ Write-Host "[build_msvc] Config      : $Config"
 
 function Find-VsDevCmd {
     $vswhere = "$env:ProgramFiles(x86)\Microsoft Visual Studio\Installer\vswhere.exe"
-    if (-not (Test-Path $vswhere)) {
-        $vswhere = "$env:ProgramFiles\Microsoft Visual Studio\Installer\vswhere.exe"
-    }
+    if (-not (Test-Path $vswhere)) { $vswhere = "$env:ProgramFiles\Microsoft Visual Studio\Installer\vswhere.exe" }
     if (Test-Path $vswhere) {
         $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null
-        if ($vsPath) {
+        if ($LASTEXITCODE -eq 0 -and $vsPath) {
             $candidate = Join-Path $vsPath 'Common7\Tools\VsDevCmd.bat'
             if (Test-Path $candidate) { return $candidate }
         }
     }
-    $fallbacks = @(
+    foreach ($fb in @(
         'C:\Program Files\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat',
         'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat',
         'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat',
-        'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat'
-    )
-    foreach ($fb in $fallbacks) {
+        'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat')) {
         if (Test-Path $fb) { return $fb }
     }
     return $null
@@ -47,25 +42,21 @@ function Find-VsDevCmd {
 
 function Test-ArchFlag([string]$flag) {
     $tmp = [System.IO.Path]::GetTempFileName() + '.c'
-    'int main(void){return 0;}' | Set-Content $tmp
-    $out = & cmd /c "cl.exe /nologo $flag $tmp /Fe:nul 2>&1"
-    Remove-Item $tmp -ErrorAction SilentlyContinue
-    return ($LASTEXITCODE -eq 0 -and ($out -notmatch 'D9002'))
+    try {
+        'int main(void){return 0;}' | Set-Content $tmp
+        $out = & cmd /c "cl.exe /nologo $flag `"$tmp`" /Fe:nul 2>&1"
+        return ($LASTEXITCODE -eq 0 -and ($out -notmatch 'D9002'))
+    } finally {
+        Remove-Item $tmp -ErrorAction SilentlyContinue
+    }
 }
 
-if ($Arch -eq 'arm64') {
-    $archFlag = ''
-} elseif ($Config -eq 'Release' -and (Test-ArchFlag '/arch:AVX2')) {
-    $archFlag = '/arch:AVX2'
-} else {
-    $archFlag = ''
-}
+if ($Arch -eq 'arm64') { $archFlag = '' }
+elseif ($Config -eq 'Release' -and (Test-ArchFlag '/arch:AVX2')) { $archFlag = '/arch:AVX2' }
+else { $archFlag = '' }
 
-if ($archFlag) {
-    Write-Host "[build_msvc] SIMD flag   : $archFlag"
-} else {
-    Write-Host '[build_msvc] SIMD flag   : (none — scalar fallback)'
-}
+if ($archFlag) { Write-Host "[build_msvc] SIMD flag   : $archFlag" }
+else { Write-Host '[build_msvc] SIMD flag   : (none — scalar fallback)' }
 
 $commonFlags = @('/nologo', '/W4', '/WX', '/wd4996', '/EHsc')
 if ($archFlag) { $commonFlags += $archFlag }
@@ -74,19 +65,20 @@ $configFlags = if ($Config -eq 'Release') { @('/O2', '/GL', '/DNDEBUG') } else {
 function Invoke-ClBuild {
     param([string[]]$Sources, [string]$Out, [string[]]$ExtraFlags = @(), [string[]]$LinkerLibs = @())
     $allFlags = @($commonFlags + $configFlags + @('/I.', '/ICore_CPP', '/Iinclude') + $ExtraFlags)
-    $flagStr  = $allFlags -join ' '
-    $srcStr   = ($Sources | ForEach-Object { '"' + $_ + '"' }) -join ' '
-    $libStr   = if ($LinkerLibs.Count -gt 0) { ' /link ' + ($LinkerLibs -join ' ') } else { '' }
+    $flagStr = $allFlags -join ' '
+    $srcStr = ($Sources | ForEach-Object { '"' + $_ + '"' }) -join ' '
+    $libStr = if ($LinkerLibs.Count -gt 0) { ' /link ' + ($LinkerLibs -join ' ') } else { '' }
     $cmd = "cl.exe $flagStr $srcStr /Fe:`"$Out`"$libStr"
     Write-Host "`n[build_msvc] Compiling: $Out"
     Write-Host "  cmd> $cmd"
     $result = & cmd /c "$cmd 2>&1"
+    $nestedExit = $LASTEXITCODE
     foreach ($line in $result) { Write-Host "  $line" }
-    if ($LASTEXITCODE -ne 0) { throw "[build_msvc] FAILED (exit $LASTEXITCODE): $Out" }
-    if (Test-Path $Out) {
-        $sz = (Get-Item $Out).Length
-        Write-Host "[build_msvc] OK  $Out  ($([math]::Round($sz/1KB,1)) KB)"
-    }
+    if ($nestedExit -ne 0) { throw "[build_msvc] FAILED (exit $nestedExit): $Out" }
+    if (-not (Test-Path $Out)) { throw "[build_msvc] compiler reported success but artifact is missing: $Out" }
+    $sz = (Get-Item $Out).Length
+    if ($sz -le 0) { throw "[build_msvc] artifact is empty: $Out" }
+    Write-Host "[build_msvc] OK  $Out  ($([math]::Round($sz/1KB,1)) KB)"
 }
 
 $clInPath = Get-Command cl.exe -ErrorAction SilentlyContinue
@@ -97,14 +89,13 @@ if (-not $clInPath) {
     $scriptPath = $MyInvocation.MyCommand.Path
     $archArg = "-Arch $Arch"
     $cfgArg = "-Config $Config"
-    $inner = "pwsh -NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`" $archArg $cfgArg"
+    $inner = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`" $archArg $cfgArg"
     & cmd /c "`"$vsDevCmd`" -arch=$Arch -no_logo && $inner"
-    exit $LASTEXITCODE
+    if ($LASTEXITCODE -ne 0) { throw "[build_msvc] bootstrapped build failed (exit $LASTEXITCODE)." }
+    exit 0
 }
 
 $niyahSrc = @("$Root\Core_CPP\niyah_core.c", "$Root\Core_CPP\niyah_main.c")
-# trainer.cpp / trainer_real.cpp / trainer_real_fix.cpp were fake stubs and have been removed.
-# The real Adam trainer is niyah_train.c → niyah_train.exe.
 $niyahTrainSrc = @("$Root\Core_CPP\niyah_train.c", "$Root\Core_CPP\niyah_core.c", "$Root\tokenizer.c")
 $hybridSrc = @(
     "$Root\Core_CPP\niyah_hybrid_main.c",
@@ -124,7 +115,6 @@ Invoke-ClBuild -Sources $niyahTrainSrc -Out "$Root\niyah_train.exe" -ExtraFlags 
 Invoke-ClBuild -Sources $hybridSrc -Out "$Root\Core_CPP\niyah_hybrid.exe" -ExtraFlags @('/std:c17', '/DWINHTTP_LINK')
 Invoke-ClBuild -Sources $benchSrc -Out "$Root\Core_CPP\bench_niyah.exe" -ExtraFlags @('/std:c17')
 
-# casper.exe — sovereign search CLI (casper_cli.c + rag + rules + proof)
 $casperSrc = @(
     "$Root\Core_CPP\casper_cli.c",
     "$Root\Core_CPP\casper_rag.c",
@@ -141,11 +131,10 @@ foreach ($artifact in @(
     "$Root\Core_CPP\bench_niyah.exe",
     "$Root\casper.exe"
 )) {
-    if (Test-Path $artifact) {
-        $hash = (Get-FileHash $artifact -Algorithm SHA256).Hash
-        $sz = [math]::Round((Get-Item $artifact).Length / 1KB, 1)
-        Write-Host "  $hash  $((Split-Path $artifact -Leaf))  (${sz} KB)"
-    }
+    if (-not (Test-Path $artifact)) { throw "[build_msvc] required artifact missing: $artifact" }
+    $hash = (Get-FileHash $artifact -Algorithm SHA256).Hash
+    $sz = [math]::Round((Get-Item $artifact).Length / 1KB, 1)
+    Write-Host "  $hash  $((Split-Path $artifact -Leaf))  (${sz} KB)"
 }
 
-Write-Host "`n[build_msvc] Build complete."
+Write-Host "`n[build_msvc] BUILD PASS (exit 0; all artifacts present)."
