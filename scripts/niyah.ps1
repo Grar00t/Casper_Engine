@@ -27,14 +27,25 @@ $ErrorActionPreference = "Stop"
 Set-Location (Join-Path $PSScriptRoot "..")
 $RepoRoot = (Get-Location).Path
 
+function Assert-ProcessSuccess([string]$Name, [int]$ExitCode) {
+    if ($ExitCode -ne 0) {
+        throw "[niyah] $Name failed (exit $ExitCode)."
+    }
+}
+
 function Invoke-Build {
     Write-Host "[niyah] build..."
     & powershell -ExecutionPolicy Bypass -File (Join-Path $RepoRoot "scripts\build_msvc.ps1") -Config Release
+    Assert-ProcessSuccess "build" $LASTEXITCODE
 }
 
 function Require-Binaries {
-    if (-not (Test-Path (Join-Path $RepoRoot "Core_CPP\niyah_hybrid.exe"))) {
+    $hybrid = Join-Path $RepoRoot "Core_CPP\niyah_hybrid.exe"
+    if (-not (Test-Path $hybrid)) {
         Invoke-Build
+    }
+    if (-not (Test-Path $hybrid)) {
+        throw "[niyah] required artifact missing: $hybrid"
     }
 }
 
@@ -43,6 +54,7 @@ function Invoke-Corpus {
     $corpusScript = Join-Path $RepoRoot "scripts\build_corpus.ps1"
     if (Test-Path $corpusScript) {
         & powershell -ExecutionPolicy Bypass -File $corpusScript
+        Assert-ProcessSuccess "corpus" $LASTEXITCODE
     } else {
         Write-Host "[niyah] corpus script not found; skipping."
     }
@@ -52,14 +64,24 @@ function Invoke-Train {
     Write-Host "[niyah] train..."
     Require-Binaries
     $trainer = Join-Path $RepoRoot "niyah_train.exe"
+    if (-not (Test-Path $trainer)) {
+        throw "[niyah] required artifact missing: $trainer"
+    }
     & $trainer $DataPath $Epochs $Lr $MinLr
+    Assert-ProcessSuccess "train" $LASTEXITCODE
 }
 
 function Invoke-Smoke {
     Write-Host "[niyah] smoke..."
     Require-Binaries
     $smoke = Join-Path $RepoRoot "Core_CPP\niyah_hybrid.exe"
+    if (-not (Test-Path $smoke)) {
+        throw "[niyah] smoke executable missing: $smoke"
+    }
     & $smoke --smoke
+    $exitCode = $LASTEXITCODE
+    Assert-ProcessSuccess "smoke" $exitCode
+    Write-Host "[niyah] SMOKE PASS (exit 0)"
 }
 
 function Invoke-Bench {
@@ -68,20 +90,23 @@ function Invoke-Bench {
     $bench = Join-Path $RepoRoot "Core_CPP\bench_niyah.exe"
     if (-not (Test-Path $bench)) {
         Write-Host "[niyah] building benchmark binary..."
-        & powershell -ExecutionPolicy Bypass -File (Join-Path $RepoRoot "scripts\build_msvc.ps1") -Config Release
+        Invoke-Build
+    }
+    if (-not (Test-Path $bench)) {
+        throw "[niyah] benchmark executable missing: $bench"
     }
     & $bench
+    Assert-ProcessSuccess "bench" $LASTEXITCODE
 }
 
 function Invoke-Save {
     Write-Host "[niyah] save..."
     Invoke-Train
     $saved = Join-Path $RepoRoot "niyah_trained.bin"
-    if (Test-Path $saved) {
-        Write-Host "[niyah] saved model to $saved"
-    } else {
-        Write-Host "[niyah] model output was not produced; check the trainer output."
+    if (-not (Test-Path $saved)) {
+        throw "[niyah] model output was not produced: $saved"
     }
+    Write-Host "[niyah] saved model to $saved"
 }
 
 function Invoke-Run {
@@ -89,11 +114,9 @@ function Invoke-Run {
     Require-Binaries
     $hybrid = Join-Path $RepoRoot "Core_CPP\niyah_hybrid.exe"
     if (-not (Test-Path $hybrid)) {
-        Write-Host "[niyah] building hybrid binary..."
-        & powershell -ExecutionPolicy Bypass -File (Join-Path $RepoRoot "scripts\build_msvc.ps1") -Config Release
+        throw "[niyah] hybrid executable missing: $hybrid"
     }
 
-    # Prefer the parameter-supplied model; fall back to the standard trained output.
     $resolvedModel = $Model
     if (-not (Test-Path $resolvedModel)) {
         $fallback = Join-Path $RepoRoot "niyah_trained.bin"
@@ -101,12 +124,13 @@ function Invoke-Run {
             $resolvedModel = $fallback
             Write-Host "[niyah] model '$Model' not found; using '$resolvedModel'"
         } else {
-            Write-Host "[niyah] WARNING: no model file found. Run 'niyah.ps1 train' first."
+            throw "[niyah] no model file found: '$Model' or '$fallback'"
         }
     }
 
     $inputText = @($Prompt, "quit") -join [Environment]::NewLine
     $inputText | & $hybrid --model $resolvedModel --interactive
+    Assert-ProcessSuccess "run" $LASTEXITCODE
 }
 
 switch ($Action) {
@@ -120,11 +144,9 @@ switch ($Action) {
     "all" {
         Invoke-Build
         if (Test-Path (Join-Path $RepoRoot "Data_Training\sources")) {
-            try { Invoke-Corpus } catch { Write-Host "[niyah] corpus skipped: $($_.Exception.Message)" }
+            Invoke-Corpus
         }
         Invoke-Train
         Invoke-Smoke
     }
 }
-
-
