@@ -5,7 +5,6 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="release"
 FORCE_ARCH=""
 CC_OVERRIDE=""
-CXX_OVERRIDE=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -13,10 +12,17 @@ while [[ $# -gt 0 ]]; do
         --release) CONFIG="release" ;;
         --arch) [[ $# -ge 2 ]] || { echo "[build_gcc] missing --arch value" >&2; exit 2; }; FORCE_ARCH="$2"; shift ;;
         --compiler) [[ $# -ge 2 ]] || { echo "[build_gcc] missing --compiler value" >&2; exit 2; }; CC_OVERRIDE="$2"; shift ;;
+        --lint) RUN_LINT=1 ;;
+        --smoke) RUN_SMOKE=1 ;;
+        --bench) RUN_BENCH=1 ;;
         *) echo "[build_gcc] unknown flag: $1" >&2; exit 2 ;;
     esac
     shift
 done
+
+RUN_LINT="${RUN_LINT:-0}"
+RUN_SMOKE="${RUN_SMOKE:-0}"
+RUN_BENCH="${RUN_BENCH:-0}"
 
 if [[ -n "$CC_OVERRIDE" ]]; then
     CC="$CC_OVERRIDE"
@@ -54,62 +60,116 @@ case "$ARCH" in
     *) echo "[build_gcc] unsupported arch: $ARCH" >&2; exit 2 ;;
 esac
 
-WARN_C="-Wall -Wextra -Werror -Wstrict-prototypes -Wmissing-prototypes -Wcast-align -Wwrite-strings -Wshadow -pedantic"
-WARN_CXX="-Wall -Wextra -Werror -Wcast-align -Wshadow"
+WARN="-Wall -Wextra -Werror -Wstrict-prototypes -Wmissing-prototypes -Wcast-align -Wwrite-strings -Wshadow -pedantic"
 
 if [[ "$CONFIG" == "release" ]]; then
-    OPT_C="-O3 -DNDEBUG"; OPT_CXX="-O3 -DNDEBUG"; LINK_FLAGS="-flto"
+    OPT="-O3 -DNDEBUG"
+    LDFLAGS="-lm -flto"
 else
-    OPT_C="-O0 -g3 -DDEBUG"; OPT_CXX="-O0 -g3 -DDEBUG"; LINK_FLAGS=""
+    OPT="-O0 -g3 -DDEBUG"
+    LDFLAGS="-lm"
     if "$CC" -fsanitize=address -x c /dev/null -o /dev/null >/dev/null 2>&1; then
-        OPT_C+=" -fsanitize=address,undefined"; OPT_CXX+=" -fsanitize=address,undefined"; LINK_FLAGS+=" -fsanitize=address,undefined"
+        OPT="$OPT -fsanitize=address,undefined -fno-omit-frame-pointer"
+        LDFLAGS="$LDFLAGS -fsanitize=address,undefined"
     fi
 fi
 
-build_c() { local out="$1"; shift; "$CC" $OPT_C $ARCH_FLAGS $WARN_C "$@" -o "$out" -lm $LINK_FLAGS; [[ -s "$out" ]]; }
-build_cxx() { local out="$1"; shift; "$CXX" -std=c++17 $OPT_CXX $ARCH_FLAGS $WARN_CXX "$@" -o "$out" $LINK_FLAGS; [[ -s "$out" ]]; }
+build_c() {
+    local out="$1"; shift
+    "$CC" $OPT $ARCH_FLAGS $WARN "$@" -o "$out" $LDFLAGS
+    [[ -s "$out" ]] || { echo "[build_gcc] artifact missing/empty: $out" >&2; return 1; }
+}
 
 NIYAH_OUT="$ROOT/Core_CPP/niyah"
 TRAIN_OUT="$ROOT/Core_CPP/trainer"
 HYBRID_OUT="$ROOT/Core_CPP/niyah_hybrid"
 BENCH_OUT="$ROOT/Core_CPP/bench_niyah"
+CASPER_OUT="$ROOT/Core_CPP/casper"
 
-build_c "$NIYAH_OUT" "$ROOT/Core_CPP/niyah_core.c" "$ROOT/Core_CPP/niyah_main.c"
-[[ -f "$ROOT/Core_CPP/trainer.cpp" ]] && build_cxx "$TRAIN_OUT" "$ROOT/Core_CPP/trainer.cpp"
+build_c "$NIYAH_OUT" \
+    "$ROOT/Core_CPP/niyah_core.c" \
+    "$ROOT/Core_CPP/niyah_main.c"
 
-if [[ -f "$ROOT/Core_CPP/niyah_hybrid_main.c" ]]; then
-    build_c "$HYBRID_OUT" \
-        "$ROOT/Core_CPP/niyah_hybrid_main.c" \
-        "$ROOT/Core_CPP/niyah_core.c" \
-        "$ROOT/Core_CPP/hybrid_reasoner.c" \
-        "$ROOT/Core_CPP/constraint_solver.c" \
-        "$ROOT/Core_CPP/rule_parser.c" \
-        "$ROOT/Core_CPP/proof_generator.c" \
-        "$ROOT/Core_CPP/khz_q_svd.c" \
-        "$ROOT/Core_CPP/casper_rag.c" \
-        "$ROOT/tokenizer.c" || { echo "[build_gcc] hybrid build failed" >&2; exit 1; }
-fi
+build_c "$TRAIN_OUT" \
+    "$ROOT/Core_CPP/niyah_train.c" \
+    "$ROOT/Core_CPP/niyah_core.c" \
+    "$ROOT/tokenizer.c"
+
+build_c "$HYBRID_OUT" \
+    "$ROOT/Core_CPP/niyah_hybrid_main.c" \
+    "$ROOT/Core_CPP/niyah_core.c" \
+    "$ROOT/Core_CPP/hybrid_reasoner.c" \
+    "$ROOT/Core_CPP/constraint_solver.c" \
+    "$ROOT/Core_CPP/rule_parser.c" \
+    "$ROOT/Core_CPP/proof_generator.c" \
+    "$ROOT/Core_CPP/khz_q_svd.c" \
+    "$ROOT/Core_CPP/casper_rag.c" \
+    "$ROOT/tokenizer.c"
+
+build_c "$CASPER_OUT" \
+    "$ROOT/Core_CPP/casper_cli.c" \
+    "$ROOT/Core_CPP/casper_rag.c" \
+    "$ROOT/Core_CPP/rule_parser.c" \
+    "$ROOT/Core_CPP/proof_generator.c" \
+    "$ROOT/Core_CPP/khz_q_svd.c"
 
 if [[ -f "$ROOT/Core_CPP/bench_niyah.c" ]]; then
-    build_c "$BENCH_OUT" "$ROOT/Core_CPP/bench_niyah.c" "$ROOT/Core_CPP/niyah_core.c" || { echo "[build_gcc] benchmark build failed" >&2; exit 1; }
+    build_c "$BENCH_OUT" \
+        "$ROOT/Core_CPP/bench_niyah.c" \
+        "$ROOT/Core_CPP/niyah_core.c"
 fi
 
-for art in "$NIYAH_OUT" "$TRAIN_OUT"; do
+if [[ "$RUN_LINT" == "1" ]]; then
+    command -v cppcheck >/dev/null 2>&1 || { echo "[build_gcc] cppcheck unavailable" >&2; exit 1; }
+    cppcheck \
+        --enable=warning,style,performance,portability \
+        --error-exitcode=1 \
+        --suppress=missingIncludeSystem \
+        --suppress=unusedFunction \
+        --std=c11 \
+        -I "$ROOT/include" \
+        "$ROOT/Core_CPP/niyah_core.c" \
+        "$ROOT/Core_CPP/niyah_main.c" \
+        "$ROOT/Core_CPP/niyah_train.c" \
+        "$ROOT/Core_CPP/niyah_hybrid_main.c" \
+        "$ROOT/Core_CPP/casper_cli.c" \
+        "$ROOT/Core_CPP/casper_rag.c" \
+        "$ROOT/Core_CPP/rule_parser.c" \
+        "$ROOT/Core_CPP/proof_generator.c" \
+        "$ROOT/Core_CPP/constraint_solver.c" \
+        "$ROOT/Core_CPP/hybrid_reasoner.c" \
+        "$ROOT/Core_CPP/khz_q_svd.c"
+fi
+
+if [[ "$RUN_SMOKE" == "1" ]]; then
+    if "$NIYAH_OUT"; then
+        :
+    else
+        smoke_exit=$?
+        echo "[build_gcc] smoke failed: exit $smoke_exit" >&2
+        exit "$smoke_exit"
+    fi
+    if "$HYBRID_OUT" --smoke; then
+        :
+    else
+        smoke_exit=$?
+        echo "[build_gcc] hybrid smoke failed: exit $smoke_exit" >&2
+        exit "$smoke_exit"
+    fi
+fi
+
+if [[ "$RUN_BENCH" == "1" ]]; then
+    [[ -s "$BENCH_OUT" ]] || { echo "[build_gcc] benchmark artifact missing" >&2; exit 1; }
+    if "$BENCH_OUT"; then :; else bench_exit=$?; echo "[build_gcc] benchmark failed: exit $bench_exit" >&2; exit "$bench_exit"; fi
+fi
+
+for art in "$NIYAH_OUT" "$TRAIN_OUT" "$HYBRID_OUT" "$CASPER_OUT"; do
     [[ -s "$art" ]] || { echo "[build_gcc] required artifact missing: $art" >&2; exit 1; }
-    sha256sum "$art" 2>/dev/null || shasum -a 256 "$art"
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$art"
+    else
+        shasum -a 256 "$art"
+    fi
 done
 
-if [[ "${RUN_LINT:-0}" == "1" ]]; then
-    command -v cppcheck >/dev/null 2>&1 || { echo "[build_gcc] cppcheck unavailable" >&2; exit 1; }
-    cppcheck --enable=all --error-exitcode=1 --suppress=missingIncludeSystem --suppress=unusedFunction --std=c11 --language=c \
-        "$ROOT/Core_CPP/niyah_core.c" "$ROOT/Core_CPP/niyah_main.c"
-fi
-
-if [[ "${RUN_SMOKE:-0}" == "1" ]]; then
-    cd "$ROOT/Core_CPP"
-    ./niyah
-    smoke_exit=$?
-    [[ $smoke_exit -eq 0 ]] || { echo "[build_gcc] smoke failed: exit $smoke_exit" >&2; exit "$smoke_exit"; }
-fi
-
-echo "[build_gcc] BUILD PASS (exit 0; artifacts verified)."
+echo "[build_gcc] BUILD PASS (exit 0; required artifacts verified)."
