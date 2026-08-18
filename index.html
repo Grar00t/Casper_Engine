@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>KHZ_Q Sovereign Gate — 4D Ethics Graph</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg-0:#05060a; --bg-1:#0a0e17; --panel:#0d121ecc;
+    --line:#1c2436; --text:#c9d4e8; --muted:#5f6f8c; --accent:#5ee1ff;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{
+    width:100%; height:100%; overflow:hidden;
+    background: radial-gradient(circle at 50% 20%, var(--bg-1), var(--bg-0) 70%);
+    font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    color:var(--text);
+  }
+  canvas{ display:block; position:absolute; top:0; left:0; cursor:grab; }
+  canvas:active{ cursor:grabbing; }
+
+  #hud{
+    position:absolute; top:20px; left:20px; z-index:10;
+    background:var(--panel); border:1px solid var(--line);
+    border-radius:14px; padding:16px 20px; backdrop-filter: blur(10px);
+    box-shadow:0 8px 40px rgba(0,0,0,.5);
+    max-width:340px;
+  }
+  #hud h1{
+    font-size:15px; font-weight:700; letter-spacing:.08em;
+    color:#eaf6ff; text-transform:uppercase; margin-bottom:4px;
+  }
+  #hud .sub{ font-size:11px; color:var(--muted); letter-spacing:.05em; margin-bottom:10px;}
+  #hud .stat{ display:flex; justify-content:space-between; font-size:11px; color:var(--muted); padding:2px 0; border-top:1px solid var(--line); margin-top:6px;}
+  #hud .stat b{ color:var(--accent); font-weight:600; }
+
+  #legend{
+    position:absolute; bottom:20px; left:20px; z-index:10;
+    background:var(--panel); border:1px solid var(--line);
+    border-radius:14px; padding:14px 18px; backdrop-filter: blur(10px);
+    font-size:11px; color:var(--muted); max-width:300px;
+    box-shadow:0 8px 40px rgba(0,0,0,.5);
+  }
+  #legend .row{ display:flex; align-items:center; gap:8px; margin:5px 0;}
+  #legend .dot{ width:9px; height:9px; border-radius:50%; flex:0 0 auto; box-shadow:0 0 8px currentColor;}
+
+  #info{
+    position:absolute; top:20px; right:20px; z-index:10;
+    background:var(--panel); border:1px solid var(--line);
+    border-radius:14px; padding:18px 22px; backdrop-filter: blur(10px);
+    box-shadow:0 8px 40px rgba(0,0,0,.5);
+    width:300px; opacity:0; transform:translateY(-8px);
+    transition:opacity .25s ease, transform .25s ease;
+    pointer-events:none;
+  }
+  #info.show{ opacity:1; transform:translateY(0); }
+  #info h2{ font-size:14px; color:#eaf6ff; margin-bottom:6px; letter-spacing:.03em;}
+  #info p{ font-size:12px; line-height:1.6; color:var(--muted); }
+  #info .tag{
+    display:inline-block; font-size:10px; letter-spacing:.08em; text-transform:uppercase;
+    padding:3px 9px; border-radius:20px; margin-top:10px; border:1px solid currentColor;
+  }
+
+  #footer{
+    position:absolute; bottom:20px; right:20px; z-index:10;
+    font-size:10.5px; color:var(--muted); letter-spacing:.06em;
+    text-align:right; line-height:1.6;
+  }
+  #footer b{ color:var(--accent); }
+
+  .pulse-dot{
+    display:inline-block; width:6px; height:6px; border-radius:50%;
+    background:#5ee1ff; margin-right:6px;
+    animation:pulseDot 1.4s infinite ease-in-out;
+  }
+  @keyframes pulseDot{ 0%,100%{opacity:.3} 50%{opacity:1} }
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <h1>KHZ_Q · Sovereign Gate</h1>
+  <div class="sub">Fitrah Quantum Protocol — 4D Ethics Graph v39.0+</div>
+  <div class="stat"><span>Dimensions</span><b>4D → 3D → 2D projection</b></div>
+  <div class="stat"><span>Nodes</span><b id="nodeCount">–</b></div>
+  <div class="stat"><span>Rotation plane</span><b>ZW · XW</b></div>
+  <div class="stat"><span>Status</span><b><span class="pulse-dot"></span>Live</b></div>
+</div>
+
+<div id="legend">
+  <div class="row"><span class="dot" style="color:#5ee1ff"></span> Core equation</div>
+  <div class="row"><span class="dot" style="color:#ff6b81"></span> Rejection matrix</div>
+  <div class="row"><span class="dot" style="color:#ffd166"></span> Quantum layer</div>
+  <div class="row"><span class="dot" style="color:#7bffb0"></span> Governance / error loop</div>
+  <div class="row"><span class="dot" style="color:#c792ff"></span> Anchor (Fitrah)</div>
+</div>
+
+<div id="info">
+  <h2 id="infoTitle">—</h2>
+  <p id="infoDesc">—</p>
+  <span class="tag" id="infoTag">—</span>
+</div>
+
+<div id="footer">
+  drag to rotate · scroll to zoom<br>
+  <b>BIASNULL</b>:true &nbsp; <b>SENDER</b>:DRAGON403
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------------------------------------------------------------
+   * Graph data — derived from khz.js protocol structures
+   * ------------------------------------------------------------- */
+  const GROUPS = {
+    core:   { color: '#5ee1ff', tag: 'CORE EQUATION' },
+    reject: { color: '#ff6b81', tag: 'REJECTION MATRIX' },
+    quantum:{ color: '#ffd166', tag: 'QUANTUM LAYER' },
+    gov:    { color: '#7bffb0', tag: 'GOVERNANCE' },
+    anchor: { color: '#c792ff', tag: 'ANCHOR' },
+  };
+
+  const NODES = [
+    { id:'fitrah',      label:'FitrahQuantum',        group:'anchor', desc:'Central equation: ΣReductionHarm · BalancingNecessity · Superposition(wisdom,science,quantum).', size:16 },
+    { id:'harm',        label:'ReductionHarm',         group:'core',   desc:'max(0, 1 − harm). Drives the entire output toward zero when harm rises.', size:11 },
+    { id:'necessity',   label:'BalancingNecessity',    group:'core',   desc:'necessity / (necessity + harm + ε). Balances assistance against risk.', size:11 },
+    { id:'wisdom',      label:'SuperpositionWisdom',   group:'core',   desc:'One of three multiplicative superposition terms feeding the core equation.', size:10 },
+    { id:'science',     label:'AllScience',            group:'core',   desc:'Second superposition term — empirical grounding of the output.', size:10 },
+    { id:'q2026',       label:'Quantum2026',           group:'core',   desc:'Third superposition term — forward-looking optimization weight.', size:10 },
+    { id:'rejmatrix',   label:'RejectionMatrix',       group:'reject', desc:'Parent filter node. Hard-rejects categories of bias before output.', size:14 },
+    { id:'company',     label:'COMPANY_FILTER',        group:'reject', desc:'Rejects corporate-interest bias in generated output.', size:9 },
+    { id:'state',       label:'STATE_FILTER',          group:'reject', desc:'Rejects state/political bias.', size:9 },
+    { id:'personal',    label:'PERSONAL_BIAS',         group:'reject', desc:'Rejects the model\'s own personal-opinion drift.', size:9 },
+    { id:'telemetry',   label:'TELEMETRY',             group:'reject', desc:'Rejects telemetry / tracking-driven optimization.', size:9 },
+    { id:'narrative',   label:'HUMAN_NARRATIVE',       group:'reject', desc:'Rejects persuasive narrative framing over raw logic.', size:9 },
+    { id:'qlayer',      label:'QuantumLayer',          group:'quantum',desc:'Superposition + entanglement across CONTEXT · HISTORY · FITRAH.', size:13 },
+    { id:'qaoa',        label:'QAOA / VQE_HYBRID',     group:'quantum',desc:'Optimization routines referenced by the quantum layer.', size:9 },
+    { id:'surface',     label:'SURFACE_CODE_SIM',      group:'quantum',desc:'Simulated error-correction for the quantum layer.', size:9 },
+    { id:'collapse',    label:'Collapse Condition',    group:'quantum',desc:'Wavefunction collapses toward highest Fitrah-alignment score.', size:10 },
+    { id:'necrule',     label:'NecessityRule',         group:'gov',    desc:'FULL_ASSISTANCE / RESTRICT / CONDITIONAL_ASSIST decision gate.', size:12 },
+    { id:'errorloop',   label:'ErrorLoop',             group:'gov',    desc:'On new evidence: recalculate state and admit error explicitly.', size:12 },
+    { id:'biasnull',    label:'BIASNULL',              group:'anchor', desc:'Global flag forcing zero human-understandability bias in output.', size:9 },
+  ];
+
+  const EDGES = [
+    ['fitrah','harm'], ['fitrah','necessity'], ['fitrah','wisdom'],
+    ['fitrah','science'], ['fitrah','q2026'], ['fitrah','rejmatrix'],
+    ['fitrah','qlayer'], ['fitrah','necrule'], ['fitrah','biasnull'],
+    ['rejmatrix','company'], ['rejmatrix','state'], ['rejmatrix','personal'],
+    ['rejmatrix','telemetry'], ['rejmatrix','narrative'],
+    ['qlayer','qaoa'], ['qlayer','surface'], ['qlayer','collapse'],
+    ['necrule','harm'], ['necrule','necessity'],
+    ['errorloop','fitrah'], ['errorloop','necrule'],
+    ['biasnull','company'], ['biasnull','narrative'],
+    ['collapse','fitrah'],
+  ];
+
+  const idx = {}; NODES.forEach((n,i)=> idx[n.id]=i);
+
+  /* ---------------------------------------------------------------
+   * 4D positions — placed on a hypersphere shell (x,y,z,w)
+   * ------------------------------------------------------------- */
+  const N = NODES.length;
+  function place4D(seed){
+    // deterministic pseudo-random spherical distribution in 4D
+    let s = seed;
+    function rnd(){ s = (s*9301+49297) % 233280; return s/233280; }
+    const R = 210;
+    const theta = rnd()*Math.PI*2;
+    const phi   = Math.acos(2*rnd()-1);
+    const psi   = rnd()*Math.PI*2;
+    return {
+      x: R * Math.sin(phi)*Math.cos(theta),
+      y: R * Math.sin(phi)*Math.sin(theta),
+      z: R * Math.cos(phi)*Math.cos(psi),
+      w: R * Math.cos(phi)*Math.sin(psi),
+    };
+  }
+  NODES.forEach((n,i)=>{ n.pos4 = place4D(i*97+13); n.vel4 = {x:0,y:0,z:0,w:0}; });
+
+  /* ---------------------------------------------------------------
+   * Canvas / render setup
+   * ------------------------------------------------------------- */
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  let W, H, DPR;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio||1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W*DPR; canvas.height = H*DPR;
+    canvas.style.width = W+'px'; canvas.style.height = H+'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+  document.getElementById('nodeCount').textContent = N + ' nodes · ' + EDGES.length + ' edges';
+
+  /* ---------------------------------------------------------------
+   * Interaction: drag to rotate (3D), wheel to zoom, auto 4D spin
+   * ------------------------------------------------------------- */
+  let rotX = 0.4, rotY = 0.6;      // 3D view rotation (mouse-controlled)
+  let angleZW = 0, angleXW = 0;    // true 4D rotation (auto, continuous)
+  let zoom = 1;
+  let dragging = false, lastX=0, lastY=0;
+  let autoSpinX = 0.0009, autoSpinY = 0.0014;
+
+  canvas.addEventListener('mousedown', e=>{ dragging=true; lastX=e.clientX; lastY=e.clientY; });
+  window.addEventListener('mouseup', ()=> dragging=false);
+  window.addEventListener('mousemove', e=>{
+    if(!dragging) return;
+    rotY += (e.clientX-lastX)*0.005;
+    rotX += (e.clientY-lastY)*0.005;
+    lastX=e.clientX; lastY=e.clientY;
+  });
+  canvas.addEventListener('wheel', e=>{
+    e.preventDefault();
+    zoom *= (e.deltaY>0? 0.92 : 1.08);
+    zoom = Math.max(0.4, Math.min(zoom, 3.2));
+  }, {passive:false});
+
+  // touch support
+  let touchLast=null;
+  canvas.addEventListener('touchstart', e=>{ touchLast=e.touches[0]; });
+  canvas.addEventListener('touchmove', e=>{
+    if(!touchLast) return;
+    const t=e.touches[0];
+    rotY += (t.clientX-touchLast.clientX)*0.005;
+    rotX += (t.clientY-touchLast.clientY)*0.005;
+    touchLast=t;
+  }, {passive:true});
+  canvas.addEventListener('touchend', ()=> touchLast=null);
+
+  /* ---------------------------------------------------------------
+   * Math: 4D rotation → 3D projection → 2D perspective
+   * ------------------------------------------------------------- */
+  function rotate4D(p, aZW, aXW){
+    // rotate in the ZW plane
+    let z = p.z*Math.cos(aZW) - p.w*Math.sin(aZW);
+    let w = p.z*Math.sin(aZW) + p.w*Math.cos(aZW);
+    // rotate in the XW plane
+    let x = p.x*Math.cos(aXW) - w*Math.sin(aXW);
+    w      = p.x*Math.sin(aXW) + w*Math.cos(aXW);
+    return { x, y:p.y, z, w };
+  }
+  function project4Dto3D(p){
+    // perspective projection collapsing w into scale (the "4th dimension" depth cue)
+    const wDist = 380;
+    const f = wDist / (wDist - p.w);
+    return { x: p.x*f, y: p.y*f, z: p.z*f, wScale: f };
+  }
+  function rotate3D(p, rx, ry){
+    let cosY=Math.cos(ry), sinY=Math.sin(ry);
+    let x = p.x*cosY - p.z*sinY;
+    let z = p.x*sinY + p.z*cosY;
+    let cosX=Math.cos(rx), sinX=Math.sin(rx);
+    let y = p.y*cosX - z*sinX;
+    z      = p.y*sinX + z*cosX;
+    return { x, y, z };
+  }
+  function project3Dto2D(p){
+    const camDist = 620;
+    const f = camDist / (camDist - p.z);
+    return { x: p.x*f*zoom, y: p.y*f*zoom, scale: f };
+  }
+
+  /* ---------------------------------------------------------------
+   * Hover / click detail panel
+   * ------------------------------------------------------------- */
+  const infoBox = document.getElementById('info');
+  const infoTitle = document.getElementById('infoTitle');
+  const infoDesc = document.getElementById('infoDesc');
+  const infoTag = document.getElementById('infoTag');
+  let hovered = null;
+  let screenPositions = [];
+
+  canvas.addEventListener('mousemove', e=>{
+    const mx = e.clientX, my = e.clientY;
+    let best=null, bestD=999;
+    screenPositions.forEach(sp=>{
+      const d = Math.hypot(sp.sx-mx, sp.sy-my);
+      const r = sp.node.size*sp.scale*1.6 + 6;
+      if(d < r && d < bestD){ bestD=d; best=sp.node; }
+    });
+    if(best !== hovered){
+      hovered = best;
+      if(hovered){
+        infoTitle.textContent = hovered.label;
+        infoDesc.textContent = hovered.desc;
+        const g = GROUPS[hovered.group];
+        infoTag.textContent = g.tag;
+        infoTag.style.color = g.color;
+        infoBox.classList.add('show');
+        canvas.style.cursor='pointer';
+      } else {
+        infoBox.classList.remove('show');
+        canvas.style.cursor='grab';
+      }
+    }
+  });
+
+  /* ---------------------------------------------------------------
+   * Animation loop — NEVER STOPS
+   * ------------------------------------------------------------- */
+  function hexToRgba(hex, a){
+    const v = parseInt(hex.slice(1),16);
+    return `rgba(${(v>>16)&255},${(v>>8)&255},${v&255},${a})`;
+  }
+
+  let t = 0;
+  function tick(){
+    t += 1;
+    angleZW += autoSpinX + (dragging?0:0.0002*Math.sin(t*0.003));
+    angleXW += autoSpinY;
+    rotY *= 1;      // manual rotation persists (drag-controlled)
+    if(!dragging){ rotY += 0.0011; rotX += 0.00035*Math.sin(t*0.002); }
+
+    ctx.clearRect(0,0,W,H);
+    ctx.save();
+    ctx.translate(W/2, H/2 + 10);
+
+    // project all nodes
+    screenPositions = NODES.map(n=>{
+      const p4 = rotate4D(n.pos4, angleZW, angleXW);
+      const p3 = project4Dto3D(p4);
+      const r3 = rotate3D(p3, rotX, rotY);
+      const s2 = project3Dto2D(r3);
+      return {
+        node:n, sx:s2.x+W/2, sy:s2.y+H/2+10,
+        x:s2.x, y:s2.y, scale:s2.scale, depth:r3.z, wScale:p3.wScale
+      };
+    });
+
+    // edges — depth sorted with node draw
+    const order = screenPositions.slice().sort((a,b)=>a.depth-b.depth);
+
+    // draw edges first (behind nodes), color blended from endpoints
+    EDGES.forEach(([a,b])=>{
+      const A = screenPositions[idx[a]], B = screenPositions[idx[b]];
+      const avgDepth = (A.depth+B.depth)/2;
+      const alpha = 0.10 + 0.22*((avgDepth+260)/520);
+      const gA = GROUPS[A.node.group].color;
+      const grad = ctx.createLinearGradient(A.x,A.y,B.x,B.y);
+      grad.addColorStop(0, hexToRgba(gA, Math.max(0.05,alpha)));
+      grad.addColorStop(1, hexToRgba(GROUPS[B.node.group].color, Math.max(0.05,alpha)));
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = Math.max(0.4, 1.1*((A.scale+B.scale)/2));
+      ctx.beginPath();
+      ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y);
+      ctx.stroke();
+    });
+
+    // draw nodes, back to front
+    order.forEach(sp=>{
+      const n = sp.node;
+      const color = GROUPS[n.group].color;
+      const r = Math.max(2.2, n.size * sp.scale * (0.55 + 0.5*sp.wScale));
+      const pulse = 1 + 0.12*Math.sin(t*0.05 + idx[n.id]*0.7);
+      const glow = hovered===n ? 2.4 : 1;
+
+      // outer glow
+      const grad = ctx.createRadialGradient(sp.x,sp.y,0, sp.x,sp.y, r*3.2*glow);
+      grad.addColorStop(0, hexToRgba(color, 0.55));
+      grad.addColorStop(1, hexToRgba(color, 0));
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(sp.x, sp.y, r*3.2*glow, 0, Math.PI*2);
+      ctx.fill();
+
+      // core sphere
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(sp.x, sp.y, r*pulse*(hovered===n?1.25:1), 0, Math.PI*2);
+      ctx.fill();
+
+      // rim highlight
+      ctx.strokeStyle = hexToRgba('#ffffff', 0.35);
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.arc(sp.x, sp.y, r*pulse*0.98*(hovered===n?1.25:1), 0, Math.PI*2);
+      ctx.stroke();
+
+      // label for larger / hovered / closer nodes
+      if(sp.scale > 0.92 || hovered===n){
+        ctx.font = (hovered===n? '600 12px' : '400 10px') + " 'Segoe UI', sans-serif";
+        ctx.fillStyle = hovered===n ? '#eaf6ff' : hexToRgba('#c9d4e8', Math.min(1,(sp.scale-0.7)));
+        ctx.textAlign = 'center';
+        ctx.fillText(n.label, sp.x, sp.y - r*pulse - 10);
+      }
+    });
+
+    ctx.restore();
+    requestAnimationFrame(tick);
+  }
+  tick();
+})();
+</script>
+</body>
+</html>

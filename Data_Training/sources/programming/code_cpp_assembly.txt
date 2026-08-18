@@ -1,0 +1,2000 @@
+from rest_framework_gis import serializers
+from rest_framework import serializers as s
+class Artificialisee2015to2018Serializer(serializers.GeoFeatureModelSerializer):
+couverture_2015 = s.SerializerMethodField()
+couverture_2018 = s.SerializerMethodField()
+return get_label(code=obj.us_2015, label=obj.us_2015_label)
+return get_label(code=obj.us_2018, label=obj.us_2018_label)
+return get_label(code=obj.cs_2015, label=obj.cs_2015_label)
+return get_label(code=obj.cs_2018, label=obj.cs_2018_label)
+class Artificielle2018Serializer(serializers.GeoFeatureModelSerializer):
+return get_label(code=obj.couverture, label=obj.couverture_label)
+class CommunesSybarvalSerializer(serializers.GeoFeatureModelSerializer):
+class EnveloppeUrbaine2018Serializer(serializers.GeoFeatureModelSerializer):
+return get_label(code=obj.couverture, label=obj.couverture_label)
+class OcsgeSerializer(serializers.GeoFeatureModelSerializer):
+return get_label(code=obj.couverture, label=obj.couverture_label)
+return get_label(code=obj.usage, label=obj.usage_label)
+class Renaturee2018to2015Serializer(serializers.GeoFeatureModelSerializer):
+couverture_2015 = s.SerializerMethodField()
+couverture_2018 = s.SerializerMethodField()
+return get_label(code=obj.us_2015, label=obj.us_2015_label)
+return get_label(code=obj.us_2018, label=obj.us_2018_label)
+return get_label(code=obj.cs_2015, label=obj.cs_2015_label)
+return get_label(code=obj.cs_2018, label=obj.cs_2018_label)
+class SybarvalSerializer(serializers.GeoFeatureModelSerializer):
+class Voirie2018Serializer(serializers.GeoFeatureModelSerializer):
+return get_label(code=obj.couverture, label=obj.couverture_label)
+return get_label(code=obj.usage, label=obj.usage_label)
+class ZonesBaties2018Serializer(serializers.GeoFeatureModelSerializer):
+return get_label(code=obj.couverture, label=obj.couverture_label)
+return get_label(code=obj.usage, label=obj.usage_label)
+class CouvertureSolSerializer(serializers.ModelSerializer):
+class UsageSolSerializer(serializers.ModelSerializer):
+class SearchResultAdmin(admin.ModelAdmin):
+fields = ["query", "heading", "url", "text"]
+admin.site.register(SearchResult, SearchResultAdmin)
+from typing import Text, Optional, List, Union, Dict
+from rasa.importers.importer import TrainingDataImporter
+from rasa.model import FingerprintComparisonResult
+from rasa.utils.common import TempDirectoryPath
+from rasa.constants import DEFAULT_MODELS_PATH, DEFAULT_CORE_SUBDIRECTORY_NAME
+additional_arguments: Optional[Dict] = None,
+loop: Optional[asyncio.AbstractEventLoop] = None,
+persist_nlu_training_data=persist_nlu_training_data,
+additional_arguments=additional_arguments,
+training_files: Optional[Union[Text, List[Text]]],
+additional_arguments: Optional[Dict] = None,
+config: Dict of paths to the config for Core and NLU. Keys are language codes
+training_files: Paths to the training data for Core and NLU.
+force_training: If `True` retrain model even if data has not changed.
+fixed_model_name: Name of model to be stored.
+persist_nlu_training_data: `True` if the NLU training data should be persisted
+additional_arguments: Additional training parameters.
+# file_importer = TrainingDataImporter.load_from_config(
+train_path = stack.enter_context(TempDirectoryPath(tempfile.mkdtemp()))
+from rasa_addons.importers import BotfrontFileImporter
+file_importer = BotfrontFileImporter(config, domain, training_files)
+# domain = await file_importer.get_domain()
+#     return await handle_domain_if_not_exists(
+#         file_importer, output_path, fixed_model_name
+file_importer: TrainingDataImporter, output_path, fixed_model_name
+nlu_model_only = await _train_nlu_with_validated_data(
+file_importer, output=output_path, fixed_model_name=fixed_model_name
+"Core training was skipped because no valid domain file was found. Only an nlu-model was created."
+"Please specify a valid domain using '--domain' argument or check if the provided domain file exists."
+"""Trains a Rasa model (Core and NLU). Use only from `train_async`.
+file_importer: `TrainingDataImporter` which supplies the training data.
+train_path: Directory in which to train the model.
+force_training: If `True` retrain model even if data has not changed.
+persist_nlu_training_data: `True` if the NLU training data should be persisted
+fixed_model_name: Name of model to be stored.
+additional_arguments: Additional training parameters.
+stories, nlu_data = await asyncio.gather(
+file_importer.get_stories(), file_importer.get_nlu_data()
+# if stories.is_empty() and nlu_data.is_empty():
+#         "No training data given. Please provide stories and NLU data in "
+#         "order to train a Rasa model using the '--data' argument."
+#     print_warning("No NLU data present. Just a Rasa Core model will be trained.")
+#     return await _train_core_with_validated_data(
+#         fixed_model_name=fixed_model_name,
+#         additional_arguments=additional_arguments,
+new_fingerprint = await model.model_fingerprint(file_importer)
+old_model = model.get_latest_model(output_path)
+fingerprint_comparison = FingerprintComparisonResult(force_training=force_training)
+fingerprint_comparison = model.should_retrain(
+if fingerprint_comparison.nlu == True: # replace True with list of all langs
+fingerprint_comparison.nlu = list(new_fingerprint.get("nlu-config", {}).keys())
+domain = await file_importer.get_domain()
+core_untrainable = domain.is_empty() or stories.is_empty()
+nlu_untrainable = [l for l, d in nlu_data.items() if d.is_empty()]
+fingerprint_comparison.core = fingerprint_comparison.core and not core_untrainable
+fingerprint_comparison.nlu = [l for l in fingerprint_comparison.nlu if l not in nlu_untrainable]
+print_color("Skipping Core training since domain or stories are empty.", color=bcolors.OKBLUE)
+print_color("No NLU data found for language <{}>, skipping training...".format(lang), color=bcolors.OKBLUE)
+if fingerprint_comparison.is_training_required():
+fingerprint_comparison_result=fingerprint_comparison,
+persist_nlu_training_data=persist_nlu_training_data,
+additional_arguments=additional_arguments,
+"Nothing changed. You can use the old model stored at '{}'."
+fingerprint_comparison_result: Optional[FingerprintComparisonResult] = None,
+additional_arguments: Optional[Dict] = None,
+fingerprint_comparison_result = FingerprintComparisonResult()
+if fingerprint_comparison_result.should_retrain_core():
+additional_arguments=additional_arguments,
+elif fingerprint_comparison_result.should_retrain_nlg():
+"Core stories/configuration did not change. "
+"Only the templates section has been changed. A new model with "
+"the updated templates will be created.",
+await model.update_model_with_new_domain(file_importer, train_path)
+"Core stories/configuration did not change. No need to retrain Core model.",
+if fingerprint_comparison_result.should_retrain_nlu():
+retrain_nlu=fingerprint_comparison_result.nlu,
+persist_nlu_training_data=persist_nlu_training_data,
+"NLU data/configuration did not change. No need to retrain NLU model.",
+additional_arguments: Optional[Dict] = None,
+additional_arguments=additional_arguments,
+additional_arguments: Optional[Dict] = None,
+config: Path to the config file for Core.
+train_path: If `None` the model will be trained in a temporary
+directory, otherwise in the provided directory.
+fixed_model_name: Name of model to be stored.
+uncompress: If `True` the model will not be compressed.
+additional_arguments: Additional training parameters.
+If `train_path` is given it returns the path to the model archive,
+otherwise the path to the directory with the trained model files.
+file_importer = TrainingDataImporter.load_core_importer_from_config(
+domain = await file_importer.get_domain()
+"Core training was skipped because no valid domain file was found. "
+"Please specify a valid domain using '--domain' argument or check if the provided domain file exists."
+if not await file_importer.get_stories():
+"No stories given. Please provide stories in order to "
+"train a Rasa Core model using the '--stories' argument."
+return await _train_core_with_validated_data(
+additional_arguments=additional_arguments,
+async def _train_core_with_validated_data(
+additional_arguments: Optional[Dict] = None,
+"""Train Core with validated training and config data."""
+# If the train path was provided, do nothing on exit.
+# Otherwise, create a temp train path and clean it up on exit.
+_train_path = stack.enter_context(TempDirectoryPath(tempfile.mkdtemp()))
+print_color("Training Core model...", color=bcolors.OKBLUE)
+file_importer.get_domain(), file_importer.get_config()
+output_path=os.path.join(_train_path, DEFAULT_CORE_SUBDIRECTORY_NAME),
+additional_arguments=additional_arguments,
+print_color("Core model training completed.", color=bcolors.OKBLUE)
+new_fingerprint = await model.model_fingerprint(file_importer)
+train_path: If `None` the model will be trained in a temporary
+directory, otherwise in the provided directory.
+fixed_model_name: Name of the model to be stored.
+persist_nlu_training_data: `True` if the NLU training data should be persisted
+If `train_path` is given it returns the path to the model archive,
+otherwise the path to the directory with the trained model files.
+"No NLU data given. Please provide NLU data in order to train "
+"a Rasa NLU model using the '--nlu' argument."
+# training NLU only hence the training files still have to be selected
+file_importer = TrainingDataImporter.load_nlu_importer_from_config(
+training_datas = await file_importer.get_nlu_data()
+f"Path '{nlu_data}' doesn't contain valid NLU data in it. "
+"The NLU model training will be skipped now."
+return await _train_nlu_with_validated_data(
+persist_nlu_training_data=persist_nlu_training_data,
+async def _train_nlu_with_validated_data(
+retrain_nlu: Union[bool, List[Text]] = True
+"""Train NLU with validated training and config data."""
+from rasa.nlu import config as cfg_loader
+# If the train path was provided, do nothing on exit.
+# Otherwise, create a temp train path and clean it up on exit.
+_train_path = stack.enter_context(TempDirectoryPath(tempfile.mkdtemp()))
+config = await file_importer.get_nlu_config(retrain_nlu)
+print_color("Start training {} NLU model ...".format(lang), color=bcolors.OKBLUE)
+_, models[lang], _ = await rasa.nlu.train(
+persist_nlu_training_data=persist_nlu_training_data,
+print_color("NLU data for language <{}> didn't change, skipping training...".format(lang), color=bcolors.OKBLUE)
+print_color("NLU model training completed.", color=bcolors.OKBLUE)
+new_fingerprint = await model.model_fingerprint(file_importer)
+def finalPrices(self, prices: List[int]) -> List[int]:
+# ============================================================================
+# ============================================================================
+from denite.util import echo, error, clearmatch, regex_convert_py_vim
+from denite.util import Nvim, UserContext, Candidates, Candidate
+self._denite: typing.Optional[SyncParent] = None
+self._selected_candidates: typing.List[int] = []
+self._result: typing.List[typing.Any] = []
+self._displayed_texts: typing.List[str] = []
+self._prev_status: typing.Dict[str, typing.Any] = {}
+self._prev_curpos: typing.List[typing.Any] = []
+self._save_window_options: typing.Dict[str, typing.Any] = {}
+self._sources_history: typing.List[typing.Any] = []
+self._check_matchdelete = bool(self._vim.call(
+def start(self, sources: typing.List[typing.Any],
+context: UserContext) -> typing.List[typing.Any]:
+# if hasattr(self._vim, 'run_coroutine'):
+#     self._denite = ASyncParent(self._vim)
+command: str = '', is_manual: bool = False) -> None:
+candidates = self._get_selected_candidates()
+candidates = [self._get_cursor_candidate()]
+if not self._denite or not candidates or not action_name:
+post_action = self._context['post_action']
+is_quit = action['is_quit'] or post_action == 'quit'
+self._denite.do_action(self._context, action_name, candidates)
+cursor_candidate = self._get_cursor_candidate()
+if cursor_candidate == self._get_candidate(prev_cursor):
+if is_manual and self._context['sources_queue']:
+def redraw(self, is_force: bool = True) -> None:
+def _start_sources_queue(self, context: UserContext) -> None:
+self._start(context['sources_queue'][0], context)
+def _start(self, sources: typing.List[typing.Any],
+self._vim.command('silent! autocmd! denite')
+if re.search(r'\[Command Line\]$', self._vim.current.buffer.name):
+resume = self._initialized and context['resume']
+update = ('immediately', 'immediately_1',
+if self._context['quick_move'] and do_map(self, 'quick_move', []):
+self._prev_bufnr = self._vim.current.buffer.number
+self._prev_curpos = self._vim.call('getcurpos')
+self._prev_winid = self._context['prev_winid']
+self._winrestcmd = self._vim.call('winrestcmd')
+self._bufnr = self._vim.current.buffer.number
+self._winid = self._vim.call('win_getid')
+self._winheight = self._vim.current.window.height
+self._winwidth = self._vim.current.window.width
+self._bufvars = self._vim.current.buffer.vars
+'buffer_name': self._context['buffer_name'],
+self._vim.vars['denite#_previewed_buffers'] = {}
+self._save_window_options[k] = self._vim.current.window.options[k]
+# Note: Have to use setlocal instead of "current.window.options"
+# "current.window.options" changes global value instead of local in
+self._vim.command('setlocal colorcolumn=')
+self._vim.command('setlocal conceallevel=3')
+self._vim.command('setlocal concealcursor=inv')
+self._vim.command('setlocal nocursorcolumn')
+self._vim.command('setlocal nofoldenable')
+self._vim.command('setlocal foldcolumn=0')
+self._vim.command('setlocal norelativenumber')
+self._vim.command('setlocal winfixheight')
+self._vim.command('setlocal signcolumn=yes')
+self._vim.command('setlocal signcolumn=auto')
+options = self._vim.current.buffer.options
+if self._vim.call('exists', '#WinEnter'):
+if self._vim.call('exists', '#BufWinEnter'):
+self._vim.command('doautocmd BufWinEnter')
+# In Vim8, FileType autocmd is not fired after set filetype option.
+self._vim.command('silent doautocmd FileType denite')
+if (split != 'no' and self._winid > 0 and
+self._vim.call('win_gotoid', self._winid)):
+if split != 'vertical' and not self._floating:
+if self._vim.current.buffer.options['filetype'] != 'denite':
+self._titlestring = self._vim.options['titlestring']
+elif self._context['filter_split_direction'] == 'floating':
+command += ' vsplit' if split == 'vertical' else ' split'
+bufname = '[denite]-' + self._context['buffer_name']
+bufnr = self._vim.call('bufadd', bufname)
+vertical = 'vertical' if split == 'vertical' else ''
+'floating_relative_cursor'] else 'sbuffer')
+direction = str(self._context['direction'])
+if direction == 'dynamictop' or direction == 'dynamicbottom':
+is_fit = not [x for x in self._displayed_texts
+if self._vim.call('strwidth', x) > winwidth]
+direction = 'aboveleft' if is_fit else 'topleft'
+direction = 'belowright' if is_fit else 'botright'
+def _get_wininfo(self) -> typing.List[typing.Any]:
+self._vim.options['columns'], self._vim.options['lines'],
+self._vim.call('win_getid'), self._vim.call('tabpagebuflist')
+self._vim.buffers[self._prev_bufnr].name == ''):
+self._vim.command('buffer ' + str(self._prev_bufnr))
+self._vim.command('highlight default link deniteInput ModeMsg')
+self._vim.command('highlight link deniteMatchedRange ' +
+self._context['highlight_matched_range'])
+self._vim.command('highlight link deniteMatchedChar ' +
+self._vim.command('highlight default link ' +
+self._vim.command('highlight default link ' +
+self._vim.command('highlight default link ' +
+self._vim.current.window.options['winhighlight'] = (
+'Normal:' + self._context['highlight_window_background']
+self._vim.command(('syntax match deniteSelectedLine /^[%s].*/' +
+self._vim.command(('syntax match deniteConcealedMark /^[ %s]/' +
+self._denite.init_syntax(self._context, self._is_multi)
+[self._is_async, pattern, statuses, self._entire_len,
+self._candidates] = self._denite.filter_candidates(self._context)
+prev_displayed_texts = self._displayed_texts
+prev_matched_pattern = self._matched_pattern
+prev_statusline_sources = self._statusline_sources
+self._statusline_sources = ' '.join(statuses)
+updated = (self._displayed_texts != prev_displayed_texts or
+self._matched_pattern != prev_matched_pattern or
+self._statusline_sources != prev_statusline_sources)
+if self._context['search'] and self._context['input']:
+self._vim.call('setreg', '/', self._context['input'])
+def _update_displayed_texts(self) -> None:
+if not self._is_async and self._context['auto_resize']:
+winminheight = self._context['winminheight']
+max_height = min(self._context['winheight'],
+if (winminheight != -1 and candidates_len < winminheight):
+len(self._get_display_source_name(x['source_name']))
+self._context['max_source_name_len'] = max_source_name_len
+self._context['max_source_name_format'] = (
+'{:<' + str(self._context['max_source_name_len']) + '}')
+is_current_buffer = self._bufnr == self._vim.current.buffer.number
+if self._check_matchdelete and self._context['match_highlight']:
+self._vim.call('getmatches', self._winid)]
+r'\c' + regex_convert_py_vim(self._matched_pattern),
+matched_char_pattern = '[{}]'.format(re.sub(
+prev_linenr = self._vim.call('line', '.')
+prev_candidate = self._get_cursor_candidate()
+self._previous_text = self._context['input']
+is_changed = (self._context['reversed'] or
+self._previous_text != self._context['input']))
+self._vim.call('win_gotoid', self._winid)
+self._vim.call('cursor', [prev_linenr, 0])
+prev_candidate != self._get_cursor_candidate()):
+self.do_action(self._context['auto_action'])
+'buffer_name': self._context['buffer_name'],
+self._bufvars['denite_statusline'] = status
+linenr = "printf('%'.(len(line('$'))+2).'d/%d',line('.'),line('$'))"
+if self._floating or self._filter_floating:
+winnr = self._vim.call('win_id2win', self._winid)
+self._vim.call('setwinvar', winnr, '&statusline', (
+"%#deniteInput#%{denite#get_status('input')}%* " +
+"%#deniteStatusLinePath# %{denite#get_status('path')}%*" +
+"%#deniteStatusLineNumber#%{" + linenr + "}%*"))
+def _get_display_source_name(self, name: str) -> str:
+source_names = self._context['source_names']
+if not self._is_multi or source_names == 'hide':
+short_name = (re.sub(r'([a-zA-Z])[a-zA-Z]+', r'\1', name)
+if re.search(r'[^a-zA-Z]', name) else name[:2])
+source_name = short_name if source_names == 'short' else name
+def _get_candidate_display_text(self, index: int) -> str:
+source_names = self._context['source_names']
+if self._is_multi and source_names != 'hide':
+terms.append(self._context['max_source_name_format'].format(
+self._get_display_source_name(candidate['source_name'])))
+abbr = candidate.get('abbr', candidate['word']).encode(
+encoding, errors='replace').decode(encoding, errors='replace')
+terms.append(abbr[:int(self._context['max_candidate_width'])])
+return (str(self._context['selected_icon'])
+else ' ') + ' '.join(terms).replace('\n', '')
+return int(self._vim.options['lines']) if not self._floating else (
+def _resize_buffer(self, is_current_buffer: bool) -> None:
+self._vim.call('win_gotoid', self._winid)
+if not is_vertical and self._vim.current.window.height != winheight:
+if self._context['auto_resize'] and row > 1:
+self._vim.call('nvim_win_set_config', self._winid, {
+filter_row = 0 if wincol == 1 else row + winheight
+init_pos = self._vim.call('nvim_win_get_config',
+self._vim.call('nvim_win_set_config', self._winid, {
+winpos = self._vim.call('nvim_win_get_position',
+filter_winid = self._vim.vars['denite#_filter_winid']
+if self._vim.call('win_id2win', filter_winid) > 0:
+self._vim.call('nvim_win_set_config', filter_winid, {
+self._vim.command('resize ' + str(winheight))
+elif is_vertical and self._vim.current.window.width != winwidth:
+self._vim.command('vertical resize ' + str(winwidth))
+elif (self._candidates and self._context['immediately'] or
+len(self._candidates) == 1 and self._context['immediately_1']):
+if self._context['cursor_pos'].isnumeric():
+self._cursor = int(self._context['cursor_pos']) + 1
+elif re.match(r'\+\d+', self._context['cursor_pos']):
+for _ in range(int(self._context['cursor_pos'][1:])):
+elif re.match(r'-\d+', self._context['cursor_pos']):
+for _ in range(int(self._context['cursor_pos'][1:])):
+goto = self._winid > 0 and self._vim.call(
+echo(self._vim, 'Normal', '[{}/{}] {}'.format(
+candidate.get('abbr', candidate['word'])))
+def _do_command(self, command: str) -> None:
+if self._vim.current.buffer.number == self._bufnr:
+self._cursor = self._vim.call('line', '.')
+# Note: Close filter window before preview window
+self._vim.call('denite#filter#_close_filter_window')
+if not self._context['has_preview_window']:
+for bufnr in self._vim.vars['denite#_previewed_buffers'].keys():
+if not self._vim.call('win_findbuf', bufnr):
+self._vim.command('silent bdelete ' + str(bufnr))
+self._vim.vars['denite#_previewed_buffers'] = {}
+self._vim.command('highlight! link CursorLine CursorLine')
+if self._floating or self._filter_floating:
+self._vim.options['titlestring'] = self._titlestring
+if self._vim.call('bufwinnr', self._bufnr) < 0:
+self._vim.call('win_gotoid', self._winid)
+for k, v in self._save_window_options.items():
+self._vim.call('win_gotoid', self._prev_winid)
+self._vim.call('setpos', '.', self._prev_curpos)
+if self._get_wininfo() and self._get_wininfo() == self._prev_wininfo:
+# Note: execute restcmd twice to restore layout properly
+def _get_cursor_candidate(self) -> Candidate:
+def _get_candidate(self, pos: int) -> Candidate:
+if not self._candidates or pos > len(self._candidates):
+def _get_selected_candidates(self) -> Candidates:
+] if self._get_cursor_candidate() else []
+return [self._candidates[x] for x in self._selected_candidates]
+self._winheight = self._context['winheight']
+self._winwidth = self._context['winwidth']
+self._denite.gather_candidates(self._context)
+def _move_to_pos(self, pos: int) -> None:
+def _start_timer(self, key: str) -> None:
+'denite#helper#_start_update_candidates_timer', self._bufnr)
+'denite#helper#_start_update_buffer_timer', self._bufnr)
+self._vim.call('timer_stop', self._timers[key])
+# Note: After timer_stop is called, self._timers may be removed
+def _split_floating(self, split: str) -> None:
+elif split == 'floating_relative_cursor':
+opened_pos = (self._vim.call('nvim_win_get_position', 0)[0] +
+if opened_pos + height + 3 > self._vim.options['lines']:
+self._context['filter_winrow'] = row + opened_pos
+self._context['filter_winrow'] = row + height + opened_pos
+elif split == 'floating_relative_window':
+<filename>PyDSTool/core/context_managers.py
+"""Context managers implemented for (mostly) internal use"""
+__all__ = ["RedirectStdout", "RedirectStderr"]
+def _stdchannel_redirected(stdchannel, dest_filename, mode="w"):
+A context manager to temporarily redirect stdout or stderr
+(http://marc-abramowitz.com/archives/2013/07/19/python-context-manager-for-redirected-stdout-and-stderr/)
+oldstdchannel = os.dup(stdchannel.fileno())
+os.dup2(dest_file.fileno(), stdchannel.fileno())
+except (UnsupportedOperation, AttributeError):
+os.dup2(oldstdchannel, stdchannel.fileno())
+RedirectStdout = functools.partial(_stdchannel_redirected, sys.stdout)
+RedirectStderr = functools.partial(_stdchannel_redirected, sys.stderr)
+RedirectNoOp = functools.partial(_stdchannel_redirected, None, "")
+app_icon = "octicon octicon-file-directory"
+# include js, css files in header of desk.html
+# app_include_css = "/assets/pos_kiosk/css/pos_kiosk.css"
+# app_include_js = "/assets/pos_kiosk/js/pos_kiosk.js"
+# include js, css files in header of web template
+# web_include_css = "/assets/pos_kiosk/css/pos_kiosk.css"
+# web_include_js = "/assets/pos_kiosk/js/pos_kiosk.js"
+# page_js = {"page" : "public/js/file.js"}
+#     "kiosk": ["public/js/pos_page_js.js", "public/js/includes/number_to_words.js"]
+# doctype_js = {"doctype" : "public/js/doctype.js"}
+# doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
+# doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
+# doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
+# application home page (will override Website Settings)
+# get_website_user_home_page = "pos_kiosk.utils.get_home_page"
+# automatically create page for each record of this doctype
+# before_install = "pos_kiosk.install.before_install"
+# after_install = "pos_kiosk.install.after_install"
+# See frappe.core.notifications.get_notification_config
+# notification_config = "pos_kiosk.notifications.get_notification_config"
+# 	"Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
+# 	"Event": "frappe.desk.doctype.event.event.has_permission",
+# before_tests = "pos_kiosk.install.before_tests"
+# 	"pos_bahrain.api.get_item_details.get_item_details": "pos_kiosk.api.item.get_item_details"  # noqa
+from keras.layers import Dense, concatenate, LSTM, Reshape, Permute, Embedding, Dropout, Convolution1D, Flatten
+from pypagai.models.base import KerasModel
+story = Input((self._story_maxlen, ), name='story')
+question = Input((self._query_maxlen, ), name='question')
+conc = Reshape((1, int(conc.shape[1])))(conc)
+response = LSTM(hidden, dropout=0.2, recurrent_dropout=0.2)(conc)
+response = Dense(self._vocab_size, activation='softmax')(response)
+self._model = Model(inputs=[story, question], outputs=response)
+self._model.compile(optimizer=Adam(lr=2e-4), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+story = Input((self._story_maxlen, ), name='story')
+question = Input((self._query_maxlen, ), name='question')
+eb_story = Embedding(self._vocab_size, 64)(story)
+eb_question = Embedding(self._vocab_size, 64)(question)
+conc = concatenate([eb_story, eb_question], axis=1)
+response = LSTM(hidden, dropout=0.2, recurrent_dropout=0.2)(conc)
+response = Dense(self._vocab_size, activation='softmax')(response)
+self._model = Model(inputs=[story, question], outputs=response)
+self._model.compile(optimizer=Adam(lr=2e-4), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+story = Input((self._story_maxlen, ), name='story')
+question = Input((self._query_maxlen, ), name='question')
+eb_story = Embedding(self._vocab_size, 64)(story)
+eb_story = Convolution1D(64, 3, padding='same')(eb_story)
+eb_story = Convolution1D(32, 3, padding='same')(eb_story)
+eb_story = Convolution1D(16, 3, padding='same')(eb_story)
+eb_question = Embedding(self._vocab_size, 64)(question)
+eb_question = Convolution1D(64, 3, padding='same')(eb_question)
+eb_question = Convolution1D(32, 3, padding='same')(eb_question)
+eb_question = Convolution1D(16, 3, padding='same')(eb_question)
+conc = concatenate([eb_story, eb_question], axis=1)
+response = LSTM(hidden, dropout=0.2, recurrent_dropout=0.2)(conc)
+response = Dense(self._vocab_size, activation='softmax')(response)
+self._model = Model(inputs=[story, question], outputs=response)
+self._model.compile(optimizer=Adam(lr=2e-4), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+<filename>lib/variables/latent_variables/__init__.py
+from .fully_connected import FullyConnectedLatentVariable
+from .convolutional import ConvolutionalLatentVariable
+Paper: Progressive Neural Architecture Search
+from easyai.base_name.block_name import NormalizationType, ActivationType
+from easyai.base_name.backbone_name import BackboneName
+from easyai.model.backbone.utility.base_backbone import *
+from easyai.model.base_block.utility.utility_block import ConvBNActivationBlock
+from easyai.model.base_block.cls.pnasnet_block import CellA, CellB
+def __init__(self, data_channel=3, num_cells=6,
+bnName=NormalizationType.BatchNormalize2d,
+layer1 = ConvBNActivationBlock(in_channels=self.data_channel,
+self.add_block_list(layer1.get_name(), layer1, self.first_output)
+self.make_layer(self.first_output, self.num_cells)
+self.make_layer(self.first_output * 2, self.num_cells)
+self.make_layer(self.first_output * 4, self.num_cells)
+temp_block = self.block(self.in_planes, planes, stride=1,
+bn_name=self.bn_name, activation_name=self.activation_name)
+self.add_block_list(temp_block.get_name(), temp_block, planes)
+down_block = self.block(self.in_planes, planes, stride=2,
+bn_name=self.bn_name, activation_name=self.activation_name)
+self.add_block_list(down_block.get_name(), down_block, planes)
+model = PNASNet(data_channel=data_channel,
+model = PNASNet(data_channel=data_channel,
+from map_download.cmd.BaseDownloader import DownloadEngine, BaseDownloaderThread, latlng2tile_terrain, BoundBox
+url = "https://api.cesium.com/v1/assets/1/endpoint"
+resp = requests.get(url, params=param, timeout=2)
+class TerrainDownloaderThread(BaseDownloaderThread):
+URL = "https://assets.cesium.com/1/{z}/{x}/{y}.terrain?extensions=octvertexnormals-watermask&v=1.1.0"
+def __init__(self, root_dir, bbox, token, task_q, logger=None, write_db=False):
+super(TerrainDownloaderThread, self).__init__(
+root_dir, bbox, task_q, logger, write_db=write_db, db_file_name='Terrain.db')
+bounds='%f,%f,%f,%f' % (self.bbox.min_lng, self.bbox.min_lat, self.bbox.max_lng, self.bbox.max_lat))
+file_path = '%s/%s/%i/%i/%i.%s' % (self.root_dir, 'Terrain', z, x, y, 'terrain')
+os.makedirs(os.path.dirname(file_path), exist_ok=True)
+access_token = get_access_token(self.token)
+param = {'extensions': 'octvertexnormals-watermask', 'v': '1.1.0', 'access_token': access_token}
+resp = requests.get(_url, params=param, stream=True, timeout=2)
+for chunk in resp.iter_content(chunk_size=1024):
+class TerrainDownloadEngine(DownloadEngine):
+def __init__(self, root_dir, bbox, token, thread_num, logger=None, write_db=False):
+super(TerrainDownloadEngine, self).__init__(bbox, thread_num, logger, write_db=write_db)
+min_x, min_y = latlng2tile_terrain(bbox.min_lat, bbox.min_lng, z)
+max_x, max_y = latlng2tile_terrain(bbox.max_lat, bbox.max_lng, z)
+return math.floor(min_x), math.floor(min_y), math.ceil(max_x) + 1, math.ceil(max_y) + 1
+"attribution": "© Analytical Graphics Inc., © CGIAR-CSI, Produced using Copernicus data and "
+"information funded by the European Union - EU-DEM layers",
+"description": "STK World Terrain Premium Tileset, v1.3. 10m - 30m resolution CONUS, 30m resolution "
+"SRTM between 60N and 60S, 30m Europe.   Minimum global coverage of 1000m.",
+"extensions": ["watermask", "vertexnormals", "octvertexnormals", ],
+"tiles": ["{z}/{x}/{y}.terrain?v={version}", ],
+_dir = os.path.join(self.root_dir, 'Terrain')
+metadatas_path = os.path.join(_dir, 'layer.json')
+thread = TerrainDownloaderThread(self.root_dir, self.bbox, self.token, task_q, self.logger,
+thread.sub_progressBar_updated_signal.connect(self.sub_update_progressBar)
+root = r'/Users/cugxy/Documents/data/downloader'
+formatter = logging.Formatter('%(levelname)s-%(message)s')
+log_file = os.path.join(root, 'down.log')
+file_hdlr = logging.FileHandler(log_file)
+bbox = BoundBox(max_lat, max_lng, min_lat, min_lng, start_zoom, end_zoom)
+d = TerrainDownloadEngine(root, bbox, 8, logger)
+from selenium.webdriver.support.ui import Select
+def download_file(pdf_url, mdir, filename, flag=False):
+context = ssl._create_unverified_context()
+response = urllib.request.urlopen(pdf_url, context=context)
+response = urllib.request.urlopen(pdf_url)
+def download_file_R(pdf_url, mdir, filename, file_out):
+requests.packages.urllib3.disable_warnings()
+while True:  # Keep trying until the webpage successfully downloads
+r = requests.get(pdf_url, verify=False, timeout=10)
+break  # If it downloads, get out and get on with life
+# If it doesn't download after the timeout period, an exceptions is thrown, and we try again
+except requests.exceptions.RequestException as e:
+def download_file_W(pdf_url, mdir, filename, flag=False):
+ssl._create_default_https_context = ssl._create_unverified_context
+Treat each province/state in a country cases over time
+as a vector, do a simple K-Nearest Neighbor between
+countries. What country has the most similar trajectory
+# ------------ HYPERPARAMETERS -------------
+BASE_PATH = '../COVID-19/csse_covid_19_data/'
+# ------------------------------------------
+'time_series_covid19_confirmed_global.csv')
+confirmed = data.load_csv_data(confirmed)
+LINE_STYLES = ['solid', 'dashed', 'dotted']
+dist_diff = os.path.join('../exp/results/', 'knn_raw.json')
+cases, labels = data.get_cases_chronologically(df)
+ax.set_xlabel("Time (days since Jan 22, 2020)")
+other_region = other_region.replace('*', '')
+plt.title(f'Comparing confirmed cases in {region} and {other_region}')
+plt.savefig(f'results/raw_manhattan/{region}.png')
+<reponame>steven-lang/rational_activations
+This module allows you to create Rational Neural Networks using Learnable
+Rational activation functions with MXNET networks.
+from rational.utils.get_weights import get_parameters
+from rational.mxnet.versions import _version_a, _version_b, _version_c, _version_d
+from rational._base.rational_base import Rational_base
+class Rational(Rational_base, HybridBlock):
+Rational Activation Function, inheriting from ``mxnet.gluon.HybridBlock``.
+The name of the approximated function for initialisation.
+The different functions are available in `rational.rationals_config.json`.
+The degrees of the numerator (P) and denominator (Q).
+NOTE: THIS PARAMETER IS CURRENTLY NOT CONSIDERED.
+Version of Rational to use. Rational(x) = P(x)/Q(x),
+P(x) = (a_0 + a_1 * x + a_2 * x^2 + ... + a_n * x^n) and
+`A`: Q(x) = (1 + |b_0 * x| + | b_1 * x^2| + ... + | b_m * x^{m+1}|)
+`B`: Q(x) = (1 + |b_0 * x + b_1 * x^2 + ... + b_m * x^{m + 1}|)
+`C`: Q(x) = (0.1 + |b_0 + b_1 * x + b_2 * x^2 + ... + b_m * x^m|)
+`D`: like `B` with noised coefficients b_i
+Whether the weights are trainable, i.e, if they are updated during
+def __init__(self, approx_func='leaky_relu', degrees=(5, 4), cuda=False,
+# read initial parameter configuration from external files
+w_numerator, w_denominator = get_parameters(
+# convert w_numerator and w_denominator to mxnet arrays
+w_denominator = mx.nd.array(w_denominator)
+# register the amount of weights in numerator and denominator, since we need them during
+# symbolic execution, but are unable to retrieve them at later stages
+self.denominator_length = len(w_denominator)
+# set specified context (currently not happening, since unclear, how and why helpful)
+# register and configure weights (numerator and denominator coefficients)
+self.numerator = self.params.get(name='w_numerator', shape=(len(w_numerator),),
+self.denominator = self.params.get(name='w_denominator', shape=(len(w_denominator),),
+# register whether function is trainable, since this information needs to be passed to
+# set rational activation function version
+self.rational_func = {'A': _version_a, 'B': _version_b, 'C': _version_c, 'D': _version_d} \
+"rational activation function version %s not implemented" % version)
+def hybrid_forward(self, F, x, numerator, denominator):
+return self.rational_func(F, x, numerator, denominator, self.training,
+self.numerator_length, self.denominator_length)
+Returns a numpy version of this activation function.
+from rational.numpy import Rational as Rational_numpy
+rational_n = Rational_numpy(self.init_approximation, self.degrees,
+rational_n.numerator = self.numerator.data().asnumpy().tolist()
+rational_n.denominator = self.denominator.data().asnumpy().tolist()
+<filename>torchflare/criterion/utils.py<gh_stars>1-10
+denom = torch.norm(x, 2, axis, keepdim=True).expand_as(x) + 1e-12
+# Source : https://github.com/earhian/Humpback-Whale-Identification-1st-/blob/master/models/triplet_loss.py
+xx = torch.pow(x, 2).sum(1, keepdim=True).expand(m, n)
+yy = torch.pow(x, 2).sum(1, keepdim=True).expand(m, m).t()
+dist = xx + yy - 2 * torch.matmul(x, y.t())
+"""Tests for the sbahn_munich integration"""
+homestack = Blueprint("homestack", __name__, url_prefix="/homestack")
+return render_template("homestack/home.html")
+from django.utils.translation import ugettext_lazy as _
+from readthedocs.payments.forms import StripeModelForm, StripeResourceMixin
+from readthedocs.payments.utils import stripe
+class SupporterForm(StripeResourceMixin, StripeModelForm):
+This extends the basic payment form, giving fields for credit card number,
+expiry, and CVV. The proper Knockout data bindings are established on
+'public': _('Make this donation public'),
+'public': _('Your name and image will be displayed on the donation page'),
+'email': _('Your email is used for Gravatar and so we can send you a receipt'),
+'logo_url': _("URL of your company's logo, images should be 300x300 pixels or less"),
+'dollars': _('Companies donating over $400 can specify a logo URL and site link'),
+'data-bind': 'value: logo_url, enable: urls_enabled'
+'data-bind': 'value: site_url, enable: urls_enabled'
+'data-bind': 'valueInit: card_digits, value: card_digits'
+last_4_digits = forms.CharField(widget=forms.HiddenInput(), required=True)
+super(SupporterForm, self).__init__(*args, **kwargs)
+"""Call stripe for payment (not ideal here) and clean up logo < $200"""
+amount=int(self.cleaned_data['dollars']) * 100,
+source=self.cleaned_data['stripe_token'],
+description='Read the Docs Sustained Engineering',
+supporter = super(SupporterForm, self).save(commit)
+if commit and self.user is not None and self.user.is_authenticated():
+class EthicalAdForm(StripeResourceMixin, StripeModelForm):
+This extends the basic payment form, giving fields for credit card number,
+expiry, and CVV. The proper Knockout data bindings are established on
+'email': _('Your email is used so we can send you a receipt'),
+'data-bind': 'valueInit: card_digits, value: card_digits'
+last_4_digits = forms.CharField(widget=forms.HiddenInput(), required=True)
+amount=int(self.cleaned_data['dollars']) * 100,
+source=self.cleaned_data['stripe_token'],
+description='Read the Docs Sponsorship Payment',
+from ..tools import COL, _get_dates, to_float, to_int
+#from pandas.tseries.frequencies import to_offset
+from six.moves import cStringIO as StringIO
+>>> expiration = {u'd': 1, u'm': 12, u'y': 2014}
+return(datetime.date(year=y, month=m, day=d))
+Returns dict like {'y': ..., 'm': ..., 'd': ...}
+>>> date_to_ymd(datetime.date(year=2010, month=1, day=3))
+Handle lazy JSON - to fix expecting property name
+this function fixes the json output from google
+http://stackoverflow.com/questions/4033633/handling-lazy-json-in-python-expecting-property-name
+tokengen = tokenize.generate_tokens(StringIO(in_text).readline)
+if tokval not in ['true', 'false', 'null', '-Infinity', 'Infinity', 'NaN']:
+tokval = u'"%s"' % tokval[1:-1].replace ('"', '\\"')
+elif (tokid == token.OP) and ((tokval == '}') or (tokval == ']')):
+if (len(result) > 0) and (result[-1][1] == ','):
+tokval = u'"%s"' % tokval[1:-1].replace ('"', '\\"')
+class DataReaderGoogleFinanceOptions(DataReaderBase):
+DataReader to fetch data from Google Finance Options
+see https://www.google.com/finance/option_chain
+https://github.com/makmac213/python-google-option-chain
+http://www.drtomstarke.com/index.php/option-chains-from-google-finance-api
+def _get_one(self, name, *args, **kwargs):
+return(self._get_one_raw(name, 'All', 'json'))
+def _get_one_raw(self, symbol, typ='All', output='json', y='2014', m='12', d='1'):
+url = "https://www.google.com/finance/option_chain"
+for i, expiration in enumerate(data['expirations']):
+df = pd.concat(lst, axis=0, ignore_index=True)
+"cs": change direction.  "chg" = up, "chr" = down, "chg"?
+"e":  # I think this tells us something about what country where the stock is traded. "OPRA" means USA.
+"expiry": expiration date for this option
+"name": I don't know.  I have never seen a value for this
+"oi": open interest. How many of these are currently being held by others.
+See, http://www.investopedia.com/terms/o/openinterest.asp
+Basically, Stock Symbol + 7 if mini option + date + "C" or "P" + price
+for col in ['Ask', 'Bid', 'c', 'cp', 'Last', 'Strike']:
+df['Expiry'] = pd.to_datetime(df['Expiry'])
+data['underlying_id'] = int(data['underlying_id'])
+data['expiry'] = ymd_to_date(**data['expiry'])
+for i, expiration in enumerate(data['expirations']):
+data['expirations'][i] = ymd_to_date(**expiration)
+#response = requests.get(url, params=params)
+response = self.session.get(url, params=params)
+<reponame>Vail-qin/Keras-TextClassification
+from keras_textclassification.data_preprocess.text_preprocess import load_json, save_json
+from keras_textclassification.conf.path_config import path_model_dir
+path_fast_text_model_vocab2index = path_model_dir + 'vocab2index.json'
+path_fast_text_model_l2i_i2l = path_model_dir + 'l2i_i2l.json'
+if os.path.exists(path_fast_text_model_l2i_i2l):
+self.l2i_i2l = load_json(path_fast_text_model_l2i_i2l)
+if os.path.exists(path_fast_text_model_l2i_i2l):
+pred_i2l_rank = [sorted(pred_i2l.items(), key=lambda k: k[1], reverse=True)]
+raise RuntimeError("path_fast_text_model_label2index is None")
+if os.path.exists(path_fast_text_model_l2i_i2l):
+pred_l2i_rank = [sorted(pred_l2i.items(), key=lambda k: k[1], reverse=True)]
+raise RuntimeError("path_fast_text_model_label2index is None")
+def preprocess_get_label_set(self, path):
+file_csv = open(path, "r", encoding="utf-8")
+if len_all > 1:  # 第一条是标签'label,ques'，不选择
+label_org = str(line_sp[0]).strip().upper()
+label_real = "NAN" if label_org=="" else label_org
+def preprocess_label_ques_to_idx(self, embedding_type, batch_size, path, embed, rate=1):
+label_set, len_all = self.preprocess_get_label_set(path)
+# 获取label转index字典等, 如果label2index存在则不转换了, dev验证集合的时候用
+if not os.path.exists(path_fast_text_model_l2i_i2l):
+save_json(l2i_i2l, path_fast_text_model_l2i_i2l)
+l2i_i2l = load_json(path_fast_text_model_l2i_i2l)
+if len_ql <= 500:  # sample时候不生效,使得语料足够训练
+file_csv = open(path, "r", encoding="utf-8")
+if cout_all_line > 1: # 第一条是标签'label,ques'，不选择
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+from gpu_tests.gpu_test_expectations import GpuTestExpectations
+# See the GpuTestExpectations class for documentation.
+class PixelExpectations(GpuTestExpectations):
+#     ['mac', 'amd', ('nvidia', 0x1234)], bug=123)
+# Seems to be flaky on the new AMD R7 240 drivers.
+self.Flaky('Pixel_GpuRasterization_BlueBox',
+# Software compositing is not supported on Android; so we skip these tests
+# that disables gpu compositing on Android platforms.
+self.Skip('Pixel_OffscreenCanvasUnaccelerated2D', ['android'])
+self.Skip('Pixel_OffscreenCanvasUnaccelerated2DWorker', ['android'])
+self.Skip('Pixel_OffscreenCanvasWebGLSoftwareCompositing', ['android'])
+self.Skip('Pixel_OffscreenCanvasWebGLSoftwareCompositingWorker',
+self.Skip('Pixel_CanvasDisplayLinearRGBUnaccelerated2D', ['android'])
+self.Fail('Pixel_ScissorTestWithPreserveDrawingBuffer',
+self.Fail('Pixel_CSS3DBlueBox', ['mac'], bug=533690)
+# TODO(vmiura) check / generate reference images for Android devices
+self.Fail('Pixel_SolidColorBackground', ['mac', 'android'], bug=624256)
+self.Fail('Pixel_OffscreenCanvasUnaccelerated2DGPUCompositingWorker',
+# TODO(kbr): flakily timing out on this configuration.
+self.Flaky('*', ['linux', 'intel', 'debug'], bug=648369)
+self.Flaky('Pixel_Video_MP4', ['android', 'nvidia'], bug=716564)
+# Flaky for unknown reasons only on macOS. Not planning to investigate
+self.Flaky('Pixel_ScissorTestWithPreserveDrawingBuffer', ['mac'],
+self.Flaky('Pixel_OffscreenCanvas2DResizeOnWorker',
+['win10', ('intel', 0x1912)], bug=690663)
+# TODO(zakerinasab): check / generate reference images.
+self.Fail('Pixel_Canvas2DUntagged', bug=713632)
+self.Flaky('Pixel_OffscreenCanvasTransferBeforeStyleResize',
+['mac', 'linux', 'win', 'android'], bug=735228)
+self.Flaky('Pixel_OffscreenCanvasTransferAfterStyleResize',
+['mac', 'linux', 'win', 'android'], bug=735171)
+self.Fail('Pixel_CSSFilterEffects', ['mac'], bug=721727)
+self.Fail('Pixel_CSSFilterEffects_NoOverlays', ['mac'], bug=721727)
+# TODO(dshwang): remove these after new reference images are generated.
+self.Fail('Pixel_DirectComposition_Video_MP4', bug=615325)
+self.Fail('Pixel_DirectComposition_Video_VP9', bug=615325)
+<filename>examples/p02_budgets/budget_data_ingest/migrations/0001_initial.py
+# Generated by Django 1.11.13 on 2018-06-08 22:54
+import django.contrib.postgres.fields.jsonb
+migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+('dollars_budgeted', models.DecimalField(decimal_places=2, max_digits=14)),
+('dollars_spent', models.DecimalField(decimal_places=2, max_digits=14)),
+('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+('created_at', models.DateTimeField(auto_now_add=True)),
+('updated_at', models.DateTimeField(auto_now=True)),
+('file_metadata', django.contrib.postgres.fields.jsonb.JSONField(null=True)),
+('file', models.FileField(upload_to='')),
+('validation_results', django.contrib.postgres.fields.jsonb.JSONField(null=True)),
+('status', models.CharField(choices=[('LOADING', 'Loading'), ('PENDING', 'Pending'), ('STAGED', 'Staged'), ('INSERTED', 'Inserted'), ('DELETED', 'Deleted')], default='LOADING', max_length=10)),
+('status_changed_at', models.DateTimeField(null=True)),
+('replaces', models.ForeignKey(null=True, on_delete=django.db.models.deletion.CASCADE, related_name='replaced_by', to='budget_data_ingest.Upload')),
+('status_changed_by', models.ForeignKey(null=True, on_delete=django.db.models.deletion.CASCADE, related_name='+', to=settings.AUTH_USER_MODEL)),
+('submitter', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
+field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='budget_data_ingest.Upload'),
+description='PySVM : A NumPy implementation of SVM based on SMO algorithm',
+long_description=open('README.md', encoding='utf-8').read(),
+url='https://github.com/Kaslanarian/PySVM',
+######## Image Object Detection Using Tensorflow-trained Classifier #########
+# This program uses a TensorFlow-trained classifier to perform object detection.
+# It loads the classifier uses it to perform object detection on an image.
+# It draws boxes and scores around the objects of interest in the image.
+## Some of the code is copied from Google's example at
+## https://github.com/tensorflow/models/blob/master/research/object_detection/object_detection_tutorial.ipynb
+## and some is copied from Dat Tran's example at
+## https://github.com/datitran/object_detector_app/blob/master/object_detection_app.py
+## but I changed it to make it more understandable to me.
+# This is needed since the notebook is stored in the object_detection folder.
+from utils import visualization_utils as vis_util
+# Name of the directory containing the object detection module we're using
+# Path to frozen detection graph .pb file, which contains the model that is used
+PATH_TO_CKPT = os.path.join(CWD_PATH,MODEL_NAME,'frozen_inference_graph.pb')
+PATH_TO_LABELS = os.path.join(CWD_PATH,'training','labelmap.pbtxt')
+PATH_TO_IMAGE = os.path.join(CWD_PATH,IMAGE_NAME)
+# Number of classes the object detector can identify
+# Label maps map indices to category names, so that when our convolution
+# network predicts `5`, we know that this corresponds to `king`.
+# Here we use internal utility functions, but anything that returns a
+# dictionary mapping integers to appropriate string labels would be fine
+label_map = label_map_util.load_labelmap(PATH_TO_LABELS)
+categories = label_map_util.convert_label_map_to_categories(label_map, max_num_classes=NUM_CLASSES, use_display_name=True)
+category_index = label_map_util.create_category_index(categories)
+with tf.gfile.GFile(PATH_TO_CKPT, 'rb') as fid:
+od_graph_def.ParseFromString(serialized_graph)
+tf.import_graph_def(od_graph_def, name='')
+# Define input and output tensors (i.e. data) for the object detection classifier
+image_tensor = detection_graph.get_tensor_by_name('image_tensor:0')
+# Output tensors are the detection boxes, scores, and classes
+# Each box represents a part of the image where a particular object was detected
+detection_boxes = detection_graph.get_tensor_by_name('detection_boxes:0')
+# Each score represents level of confidence for each of the objects.
+# The score is shown on the result image, together with the class label.
+detection_scores = detection_graph.get_tensor_by_name('detection_scores:0')
+detection_classes = detection_graph.get_tensor_by_name('detection_classes:0')
+num_detections = detection_graph.get_tensor_by_name('num_detections:0')
+# expand image dimensions to have shape: [1, None, None, 3]
+# i.e. a single-column array, where each item in the column has the pixel RGB value
+image_expanded = np.expand_dims(image, axis=0)
+# Perform the actual detection by running the model with the image as input
+(boxes, scores, classes, num) = sess.run(
+[detection_boxes, detection_scores, detection_classes, num_detections],
+feed_dict={image_tensor: image_expanded})
+# Draw the results of the detection (aka 'visulaize the results')
+vis_util.visualize_boxes_and_labels_on_image_array(
+# All the results have been drawn on image. Now display the image.
+from data_collection.management.commands import BaseXpressDemocracyClubCsvImporter
+class Command(BaseXpressDemocracyClubCsvImporter):
+addresses_name = 'parl.2017-06-08/Version 1/Torbay Democracy_Club__08June2017.tsv'
+stations_name = 'parl.2017-06-08/Version 1/Torbay Democracy_Club__08June2017.tsv'
+from rest_framework.response import Response
+from rest_framework.decorators import api_view
+from .serializers import ProductSerializer, CategorySerializer
+serializer = ProductSerializer(products,many=True)
+def get_object(self, category_slug, product_slug):
+return Product.objects.filter(category__slug=category_slug).get(slug=product_slug)
+def get(self, request, category_slug, product_slug, format= None):
+product = self.get_object(category_slug, product_slug)
+return Category.objects.get(slug=category_slug)
+def get(self, request, category_slug, format= None):
+category = self.get_object(category_slug)
+serializer = CategorySerializer(category)
+products = Product.objects.filter(Q(name__icontains=query) | Q(description__icontains=query))
+serializer = ProductSerializer(products, many=True)
+def __init__(self, fname=None, mname=None, lname=None, nick=None, title=None, comp=None, addr=None,
+home=None, mobile=None, work=None, fax=None, email1=None, email2=None, email3=None,
+homepage=None, bday=None, bmonth=None, byear=None, aday=None, amonth=None, ayear=None,
+secaddr=None, secphone=None, note=None, id =None):
+return "%s:%s:%s" % (self.id, self.fname, self.lname)
+return (self.id is None or other.id is None or self.id == other.id) and self.fname == other.fname and self.lname == other.lname
+##########################################################################
+#  Copyright (c) 2010-2012, Image Engine Design Inc. All rights reserved.
+#  Redistribution and use in source and binary forms, with or without
+#  modification, are permitted provided that the following conditions are
+#     * Redistributions of source code must retain the above copyright
+#       notice, this list of conditions and the following disclaimer.
+#     * Redistributions in binary form must reproduce the above copyright
+#       notice, this list of conditions and the following disclaimer in the
+#       documentation and/or other materials provided with the distribution.
+#     * Neither the name of Image Engine Design nor the names of any
+#       other contributors to this software may be used to endorse or
+#       promote products derived from this software without specific prior
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+#  IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+#  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+#  PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+#  CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+#  EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+#  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+#  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+#  LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+#  NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+#  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+##########################################################################
+class TestBasicPreset( unittest.TestCase ) :
+testObj = IECore.Parameterised( "testParameterised1" )
+testObj2 = IECore.Parameterised( "testParameterised2" )
+p = IECore.BasicPreset( testObj, testObj.parameters() )
+self.assertTrue( p.applicableTo( testObj, testObj.parameters() ) )
+self.assertFalse( p.applicableTo( testObj2, testObj2.parameters() ) )
+testObj.parameters()["a"].setTypedValue( False )
+testObj.parameters()["b"].setTypedValue( 0.0 )
+self.assertEqual( testObj.parameters()["a"].getTypedValue(), True )
+self.assertEqual( testObj.parameters()["b"].getTypedValue(), 1.0 )
+p2 = IECore.BasicPreset( testObj, testObj.parameters(), parameters=( testObj.parameters()["a"], ) )
+self.assertTrue( p2.applicableTo( testObj, testObj.parameters() ) )
+self.assertTrue( p2.applicableTo( testObj2, testObj.parameters() ) )
+self.assertEqual( testObj2.parameters()["a"].getTypedValue(), True )
+self.assertEqual( testObj2.parameters()["c"].getTypedValue(), 0.0 )
+testObj = IECore.Parameterised( "testParameterised1" )
+testObj2 = IECore.Parameterised( "testParameterised1" )
+savePath = os.path.abspath( os.path.join( os.path.dirname( __file__ ), "data", "basicPreset" ) )
+messageHandler = IECore.CapturingMessageHandler()
+p = IECore.BasicPreset( os.path.join( savePath, "basicPresetLoadTest", "basicPresetLoadTest-1.cob" ) )
+self.assertEqual( len( messageHandler.messages ), 0 )
+self.assertTrue( p.applicableTo( testObj, testObj.parameters() ) )
+self.assertFalse( p.applicableTo( testObj2, testObj2.parameters() ) )
+testObj.parameters()["a"].setTypedValue( False )
+testObj.parameters()["b"].setTypedValue( 0.0 )
+self.assertEqual( testObj.parameters()["a"].getTypedValue(), True )
+self.assertEqual( testObj.parameters()["b"].getTypedValue(), 1.0 )
+testObj = IECore.Parameterised( "testParameterised1" )
+testObj2 = IECore.Parameterised( "testParameterised1" )
+savePath = os.path.abspath( os.path.join( os.path.dirname( __file__ ), "data", "basicPreset" ) )
+preset = IECore.BasicPreset( testObj, testObj.parameters() )
+# Save for the classLoader and check its there, we test the 'loadability' later...
+preset.save( savePath, "basicPresetTest" )
+self.assertTrue( os.path.isfile( os.path.join( savePath, "basicPresetTest", "basicPresetTest-1.cob" ) ) )
+self.assertTrue( os.path.isfile( os.path.join( savePath, "basicPresetTest", "basicPresetTest-1.py" ) ) )
+# save without the classLoader and check its there
+preset.save( savePath, "basicPresetTest", classLoadable=False )
+self.assertTrue( os.path.isfile( os.path.join( savePath, "basicPresetTest.cob" ) ) )
+p = IECore.BasicPreset( os.path.join( savePath, "basicPresetTest.cob" ) )
+self.assertTrue( p.applicableTo( testObj, testObj.parameters() ) )
+self.assertFalse( p.applicableTo( testObj2, testObj2.parameters() ) )
+testObj.parameters()["a"].setTypedValue( False )
+testObj.parameters()["b"].setTypedValue( 0.0 )
+self.assertEqual( testObj.parameters()["a"].getTypedValue(), True )
+self.assertEqual( testObj.parameters()["b"].getTypedValue(), 1.0 )
+preset2 = IECore.BasicPreset( testObj, testObj.parameters(), parameters=( testObj.parameters()["a"], ) )
+preset2.save( savePath, "basicPresetTest2", classLoadable=False )
+p2 = IECore.BasicPreset( os.path.join( savePath, "basicPresetTest2.cob" ) )
+self.assertTrue( p2.applicableTo( testObj, testObj.parameters() ) )
+self.assertTrue( p2.applicableTo( testObj2, testObj.parameters() ) )
+self.assertEqual( testObj2.parameters()["a"].getTypedValue(), True )
+self.assertEqual( testObj2.parameters()["c"].getTypedValue(), 0.0 )
+testObj = IECore.Parameterised( "testParameterised1" )
+savePath = os.path.abspath( os.path.join( os.path.dirname( __file__ ), "data", "basicPreset" ) )
+preset = IECore.BasicPreset( testObj, testObj.parameters() )
+preset.save( savePath, "basicPresetTestClassLoader" )
+# make sure that no messages are emitted during loading
+messageHandler = IECore.CapturingMessageHandler()
+loader = IECore.ClassLoader( IECore.SearchPath( savePath ) )
+p = loader.load( "basicPresetTestClassLoader" )()
+self.assertEqual( len( messageHandler.messages ), 0 )
+self.assertTrue( isinstance( p, IECore.BasicPreset ) )
+testObj = IECore.Parameterised( "testParameterised1" )
+IECore.ClassParameter( "b", "", "IECORE_OP_PATHS", os.path.join( "maths", "multiply" ), 2 ),
+testObj2 = IECore.Parameterised( "testParameterised2" )
+IECore.ClassParameter( "c", "",	"IECORE_OP_PATHS" ),
+classes1 = testObj.parameters()["b"].getClass( True )
+classes2 = testObj2.parameters()["c"].getClass( True )
+self.assertNotEqual( classes1[1:], classes2[1:] )
+p = IECore.BasicPreset( testObj, testObj.parameters()["b"] )
+self.assertTrue( p.applicableTo( testObj, testObj.parameters()["b"] ) )
+self.assertFalse( p.applicableTo( testObj, testObj.parameters() ) )
+self.assertTrue( p.applicableTo( testObj2, testObj2.parameters()["c"] ) )
+p( testObj2, testObj2.parameters()["c"] )
+classes1 = testObj.parameters()["b"].getClass( True )
+classes2 = testObj2.parameters()["c"].getClass( True )
+self.assertEqual( classes1[1:], classes2[1:] )
+testObj = IECore.Parameterised( "testParameterised1" )
+IECore.ClassVectorParameter( "b", "", "IECORE_OP_PATHS" ),
+( "mult", os.path.join( "maths", "multiply" ), 2 ),
+testObj2 = IECore.Parameterised( "testParameterised2" )
+IECore.ClassVectorParameter( "c", "", "IECORE_OP_PATHS" ),
+classes1 = [ c[1:] for c in testObj.parameters()["b"].getClasses( True ) ]
+classes2 = [ c[1:] for c in testObj2.parameters()["c"].getClasses( True ) ]
+self.assertNotEqual( classes1, classes2 )
+p = IECore.BasicPreset( testObj, testObj.parameters()["b"] )
+self.assertTrue( p.applicableTo( testObj, testObj.parameters()["b"] ) )
+self.assertFalse( p.applicableTo( testObj, testObj.parameters() ) )
+self.assertTrue( p.applicableTo( testObj2, testObj2.parameters()["c"] ) )
+p( testObj2, testObj2.parameters()["c"] )
+classes1 = [ c[1:] for c in testObj.parameters()["b"].getClasses( True ) ]
+classes2 = [ c[1:] for c in testObj2.parameters()["c"].getClasses( True ) ]
+def testCompoundVectorParameter( self ) :
+IECore.StringVectorParameter( "s", "", IECore.StringVectorData() ),
+IECore.BoolVectorParameter( "b", "", IECore.BoolVectorData() ),
+p["c"]["s"].setValue( IECore.StringVectorData( [ "1", "2", "3" ] ) )
+p["c"]["b"].setValue( IECore.BoolVectorData( [ True, False, True ] ) )
+preset = IECore.BasicPreset( p, p.parameters() )
+self.assertTrue( preset.applicableTo( p, p.parameters() ) )
+p.parameters().setValue( p.parameters().defaultValue )
+self.assertNotEqual( p.parameters().getValue(), v )
+self.assertEqual( p.parameters().getValue(), v )
+savePath = os.path.abspath( os.path.join( os.path.dirname( __file__ ), "data", "basicPreset" ) )
+os.path.join( savePath, "basicPresetTest" ),
+os.path.join( savePath, "basicPresetTest.cob" ),
+os.path.join( savePath, "basicPresetTest2.cob" ),
+os.path.join( savePath, "basicPresetTestClassLoader" ),
+from .PacmanPackage import layout, pacman, game, ghostAgents
+from .PacmanPackage import graphicsDisplay
+__copyright__ = "Copyright 2013, RLPy http://acl.mit.edu/RLPy"
+__credits__ = ["<NAME>", "<NAME>", "<NAME>",
+Pacman domain, which acts as a wrapper for the Pacman implementation
+from the BerkeleyX/CS188.1x course project 3.
+**STATE:** The state vector has a series of dimensions:
+* [3 * ng] the x and y coordinates as well as the scare time of each ghost
+("scare time" is how long the ghost remains scared after consuming a capsule.)
+* [nf] binary variables indicating if a food is still on the board or not
+* [nc] binary variables for each capsule indicating if it is still on the board or not
+*nf* and *nc* are map-dependent, and *ng* can be set as a parameter.
+Based on above, total dimensionality of state vector is map-dependent,
+**ACTIONS:** Move Pacman [up, down, left, right, stay]
+**REWARD:** See the Berkeley project website below for more info.
+The visualization runs as fast as your CPU will permit; to slow things
+down so gameplay is actually visible, de-comment time.sleep()
+**REFERENCE:** This domain is an RLPy wrapper for the implementation
+from the `BerkeleyX/CS188.1x course project 3 <https://courses.edx.org/courses/BerkeleyX/CS188.1x/2013_Spring/courseware/Week_9/Project_3_Reinforcement/>`_
+See the original `source code (zipped) <https://courses.edx.org/static/content-berkeley-cs188x~2013_Spring/projects/reinforcement/reinforcement.zip>`_
+For more details of the domain see the original package in the `Domains/PacmanPackage` folder.
+actions = ["Stop", "North", "East", "South", "West"]
+__rlpy_location__, "Domains", "PacmanPackage",
+default_layout_dir, 'trickyClassic.lay'),
+with this probability pacman makes a random move instead the one
+layout_file_content = self._tryToLoad(self.layoutFile)
+self.layout = layout.Layout(layout_file_content)
+self.game_rules = pacman.ClassicGameRules(timeout)
+self.game_state.data.initialize(self.layout_copy, self.numGhostAgents)
+self.num_total_food = len(self.layout_copy.food.asList())
+self.num_total_capsules = len(self.layout_copy.capsules)
+# Makes an array of limits for each dimension in the state vector.
+statespace_limits.append([1, self.layout.width - 2])
+statespace_limits.append([1, self.layout.height - 2])
+# adds ghost x, y locations and scaredTimer (how long they can be
+for ghost in self.game_state.data.agentStates[1:]:
+statespace_limits.append([1, self.layout.width - 2])
+statespace_limits.append([1, self.layout.height - 2])
+statespace_limits.append([0, self._max_scared_time])
+self.num_total_food + self.num_total_capsules)
+self.statespace_limits = np.array(statespace_limits, dtype="float")
+Takes a vector s and sets the internal game state used by the original
+agent_states.configuration.pos = (s[0], s[1])
+agent_states[i].configuration.pos = (part_s[0], part_s[1])
+get the internal game state represented as a numpy array
+agent_states = self.game_state.data.agentStates
+2 + num_ghosts * 3 + self.num_total_food + self.num_total_capsules)
+s[:2] = agent_states[0].configuration.pos
+s[2 + i * 3: 2 + i * 3 + 2] = agent_states[i + 1].configuration.pos
+s[2 + i * 3 + 2] = agent_states[i + 1].scaredTimer
+errStr = 'ERROR: In Pacman.py, attempted to pass a state (s)'\
+'to showDomain(); Pacman only supports internal states.'\
+'If you do pass a state parameter, ensure it is set to None.'
+self.gameDisplay = graphicsDisplay.PacmanGraphics()
+self.gameDisplay.drawStaticObjects(s.data)
+self.gameDisplay.drawAgentObjects(s.data)
+self.gameDisplay.food = self.gameDisplay.drawFood(
+self.gameDisplay.capsules = self.gameDisplay.drawCapsules(
+# converts s vector in pacman gamestate instance and updates
+# the display every time pacman or a ghost moves.
+for agent in range(len(s.data.agentStates)):
+Applies actions from outside the Pacman domain to the given state.
+Internal states accounted for along with scoring and terminal checking.
+Returns a tuple of form (reward, new state vector, terminal)
+if self.random_state.random_sample() < self.noise:
+a = self.random_state.choice(self.possibleActions())
+next_state_p = self.game_state.generateSuccessor(0, a)
+# pacman performs action "a" in current state object
+# pacman.PacmanRules.applyAction(self.game_state, a)
+# pacman.GhostRules.checkDeath(self.game_state, 0)
+for i in range(1, len(self.game_state.data.agentStates)):
+if next_state.isWin() or next_state.isLose():
+ghostOptions = pacman.GhostRules.getLegalActions(next_state, i)
+randomAction_ind = self.random_state.randint(len(ghostOptions))
+randomAction = ghostOptions[randomAction_ind]
+next_state = next_state.generateSuccessor(i, randomAction)
+# keep track of eaten stuff for graphics (original code assumes
+# graphics are updated after every agent's move)
+next_state.data._foodEaten = next_state_p.data._foodEaten
+next_state.data._capsuleEaten = next_state_p.data._capsuleEaten
+r = next_state.data.score - self.game_state.data.score
+return r, self._get_state(), terminal, self.possibleActions()
+re-initializes internal states when an episode starts, returns a s vector
+self.game_rules = pacman.ClassicGameRules(timeout=30)
+self.layout_copy, pacman, self.ghosts, DummyGraphics(), self.beQuiet, catchExceptions=False)
+self.game_state.data.initialize(self.layout_copy, self.numGhostAgents)
+return self.state, self.isTerminal(), self.possibleActions()
+# somewhat hacky, but should not matter anyway, maybe clean up in
+# makes an array of possible actions pacman can perform at any given
+possibleMoves = pacman.GameState.getLegalActions(
+possibleActions.append(self.actions.index(a))
+Checks whether the game should terminate at the given state.
+(Terminate for failure, ie eaten by ghost or out of time, and for
+If game should terminate, returns the proper indication to step function.
+Accounts for scoring changes in terminal states.
+return self.game_state.data._lose or self.game_state.data._win
+game.Agent) for i in range(self.ghostNum)]
+from zeit.cms.i18n import MessageFactory as _
+class IGlobalSettings(zope.interface.Interface):
+"""Return the collection which is the main working directory.
+Template which will be filled with year and volume. In
+``template`` the placeholders $year and $volume will be replaced.
+If the respective collection does not exist, it will be created before
+<reponame>giggslam/python-messengerbot-sdk<filename>setup.py
+#  Licensed under the Apache License, Version 2.0 (the "License"); you may
+#  not use this file except in compliance with the License. You may obtain
+#       http://www.apache.org/licenses/LICENSE-2.0
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+#  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+#  License for the specific language governing permissions and limitations
+from setuptools.command.test import test as TestCommand
+with open('facebookbot/__about__.py', 'r') as fd:
+reg = re.compile(r'__version__ = [\'"]([^\'"]*)[\'"]')
+with open('requirements.txt', 'r') as fd:
+return [name.strip() for name in fd.readlines()]
+url="https://github.com/boompieman/fbsdk",
+description="Facebook Messaging API SDK for Python",
+"Development Status :: 5 - Production/Stable",
+"License :: OSI Approved :: Apache Software License",
+# Copyright (c) Facebook, Inc. and its affiliates.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+from torch.nn import CrossEntropyLoss, MSELoss
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...modeling_outputs import BaseModelOutputWithPooling, SequenceClassifierOutput
+from ...modeling_utils import ModuleUtilsMixin
+"""Generic Modal Embeddings which takes in an encoder, and a transformer embedding."""
+def __init__(self, config, encoder, embeddings):
+self.proj_embeddings = nn.Linear(config.modal_hidden_size, config.hidden_size)
+self.position_embeddings = embeddings.position_embeddings
+self.token_type_embeddings = embeddings.token_type_embeddings
+self.word_embeddings = embeddings.word_embeddings
+self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
+def forward(self, input_modal, start_token=None, end_token=None, position_ids=None, token_type_ids=None):
+token_embeddings = self.proj_embeddings(self.encoder(input_modal))
+start_token_embeds = self.word_embeddings(start_token)
+token_embeddings = torch.cat([start_token_embeds.unsqueeze(1), token_embeddings], dim=1)
+end_token_embeds = self.word_embeddings(end_token)
+token_embeddings = torch.cat([token_embeddings, end_token_embeds.unsqueeze(1)], dim=1)
+position_ids = torch.arange(seq_length, dtype=torch.long, device=input_modal.device)
+position_ids = position_ids.unsqueeze(0).expand(input_modal.size(0), seq_length)
+(input_modal.size(0), seq_length), dtype=torch.long, device=input_modal.device
+position_embeddings = self.position_embeddings(position_ids)
+token_type_embeddings = self.token_type_embeddings(token_type_ids)
+embeddings = token_embeddings + position_embeddings + token_type_embeddings
+MMBT model was proposed in [Supervised Multimodal Bitransformers for Classifying Images and Text](https://github.com/facebookresearch/mmbt) by <NAME>, <NAME>, <NAME>, <NAME>.
+It's a supervised multimodal bitransformer model that fuses information from text and other image encoders, and
+obtain state-of-the-art performance on various multimodal classification benchmark tasks.
+This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic
+methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
+This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)
+subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
+config ([`MMBTConfig`]): Model configuration class with all the parameters of the model.
+Initializing with a config file does not load the weights associated with the model, only the
+transformer (:class: *~nn.Module*): A text transformer that is used by MMBT.
+It should have embeddings, encoder, and pooler attributes.
+encoder (:class: *~nn.Module*): Encoder for the second modality.
+It should take in a batch of modal inputs and return k, n dimension embeddings.
+input_modal (`torch.FloatTensor` of shape `(batch_size, ***)`):
+The other modality data. It will be the shape that the encoder for that type expects. e.g. With an Image
+Encoder, the shape would be (batch_size, channels, height, width)
+input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+Indices of input sequence tokens in the vocabulary. It does not expect [CLS] token to be added as it's
+appended to the end of other modality embeddings. Indices can be obtained using
+[`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+[`PreTrainedTokenizer.__call__`] for details.
+[What are input IDs?](../glossary#input-ids)
+modal_start_tokens (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+Optional start token to be added to Other Modality Embedding. [CLS] Most commonly used for classification
+modal_end_tokens (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+Optional end token to be added to Other Modality Embedding. [SEP] Most commonly used.
+attention_mask (*optional*) `torch.FloatTensor` of shape `(batch_size, sequence_length)`:
+Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+[What are attention masks?](../glossary#attention-mask)
+token_type_ids (*optional*) `torch.LongTensor` of shape `(batch_size, sequence_length)`:
+Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
+[What are token type IDs?](../glossary#token-type-ids)
+modal_token_type_ids (*optional*) `torch.LongTensor` of shape `(batch_size, modal_sequence_length)`:
+Segment token indices to indicate different portions of the non-text modality. The embeddings from these
+tokens will be summed with the respective token embeddings for the non-text modality.
+position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
+[What are position IDs?](../glossary#position-ids)
+modal_position_ids (`torch.LongTensor` of shape `(batch_size, modal_sequence_length)`, *optional*):
+Indices of positions of each input sequence tokens in the position embeddings for the non-text modality.
+Selected in the range `[0, config.max_position_embeddings - 1]`.
+[What are position IDs?](../glossary#position-ids)
+head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+- 1 indicates the head is **not masked**,
+inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, embedding_dim)`, *optional*):
+Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+This is useful if you want more control over how to convert `input_ids` indices into associated
+vectors than the model's internal embedding lookup matrix.
+encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
+Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+output_hidden_states (`bool`, *optional*):
+Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+"The bare MMBT Model outputting raw hidden-states without any specific head on top.",
+class MMBTModel(nn.Module, ModuleUtilsMixin):
+def __init__(self, config, transformer, encoder):
+self.modal_encoder = ModalEmbeddings(config, encoder, transformer.embeddings)
+@add_start_docstrings_to_model_forward(MMBT_INPUTS_DOCSTRING)
+@replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
+transformer = BertModel.from_pretrained('bert-base-uncased')
+mmbt = MMBTModel(config, transformer, encoder)
+output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+if input_ids is not None and inputs_embeds is not None:
+raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+input_txt_shape = inputs_embeds.size()[:-1]
+raise ValueError("You have to specify either input_ids or inputs_embeds")
+device = input_ids.device if input_ids is not None else inputs_embeds.device
+input_modal_shape = modal_embeddings.size()[:-1]
+token_type_ids = torch.ones(input_txt_shape, dtype=torch.long, device=device)
+txt_embeddings = self.transformer.embeddings(
+input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
+embedding_output = torch.cat([modal_embeddings, txt_embeddings], 1)
+input_shape = embedding_output.size()[:-1]
+attention_mask = torch.ones(input_shape, device=device)
+[torch.ones(input_modal_shape, device=device, dtype=torch.long), attention_mask], dim=1
+encoder_attention_mask = torch.ones(input_shape, device=device)
+[torch.ones(input_modal_shape, device=device), encoder_attention_mask], dim=1
+extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, self.device)
+encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+encoder_outputs = self.transformer.encoder(
+encoder_hidden_states=encoder_hidden_states,
+encoder_attention_mask=encoder_extended_attention_mask,
+output_hidden_states=output_hidden_states,
+pooled_output = self.transformer.pooler(sequence_output)
+return (sequence_output, pooled_output) + encoder_outputs[1:]
+hidden_states=encoder_outputs.hidden_states,
+MMBT Model with a sequence classification/regression head on top (a linear layer on top of the pooled output)
+**labels**: (*optional*) `torch.LongTensor` of shape `(batch_size,)`:
+Labels for computing the sequence classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+Returns: *Tuple* comprising various elements depending on the configuration (config) and inputs: **loss**:
+(*optional*, returned when `labels` is provided) `torch.FloatTensor` of shape `(1,)`: Classification (or
+regression if config.num_labels==1) loss. **logits**: `torch.FloatTensor` of shape `(batch_size, config.num_labels)` Classification (or regression if config.num_labels==1) scores (before SoftMax).
+**hidden_states**: (*optional*, returned when `output_hidden_states=True`) list of `torch.FloatTensor` (one for
+the output of each layer + the output of the embeddings) of shape `(batch_size, sequence_length, hidden_size)`:
+Hidden-states of the model at the output of each layer plus the initial embedding outputs. **attentions**:
+(*optional*, returned when `output_attentions=True`) list of `torch.FloatTensor` (one for each layer) of shape
+`(batch_size, num_heads, sequence_length, sequence_length)`: Attentions weights after the attention softmax, used
+to compute the weighted average in the self-attention heads.
+transformer = BertModel.from_pretrained('bert-base-uncased')
+model = MMBTForClassification(config, transformer, encoder)
+outputs = model(input_modal, input_ids, labels=labels)
+def __init__(self, config, transformer, encoder):
+self.mmbt = MMBTModel(config, transformer, encoder)
+self.dropout = nn.Dropout(config.hidden_dropout_prob)
+self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+modal_token_type_ids=modal_token_type_ids,
+pooled_output = self.dropout(pooled_output)
+loss = loss_fct(logits.view(-1), labels.view(-1))
+loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+return ((loss,) + output) if loss is not None else output
+from eth2.beacon.state_machines.base import (  # noqa: F401
+class BaseBeaconChain(Configurable, ABC):
+The base class for all BeaconChain objects
+chaindb = None  # type: BaseBeaconChainDB
+chaindb_class = None  # type: Type[BaseBeaconChainDB]
+sm_configuration = None  # type: Tuple[Tuple[Slot, Type[BaseBeaconStateMachine]], ...]
+def get_chaindb_class(cls) -> Type[BaseBeaconChainDB]:
+genesis_block: BaseBeaconBlock) -> 'BaseBeaconChain':
+block: BaseBeaconBlock) -> Type['BaseBeaconStateMachine']:
+def get_state_machine(self, at_block: BaseBeaconBlock=None) -> 'BaseBeaconStateMachine':
+def get_state_machine_class_for_block_slot(
+slot: Slot) -> Type['BaseBeaconStateMachine']:
+def get_block_class(self, block_root: Hash32) -> Type[BaseBeaconBlock]:
+block_params: FromBlockParams) -> BaseBeaconBlock:
+def get_block_by_root(self, block_root: Hash32) -> BaseBeaconBlock:
+def get_canonical_head(self) -> BaseBeaconBlock:
+def get_score(self, block_root: Hash32) -> int:
+def ensure_block(self, block: BaseBeaconBlock=None) -> BaseBeaconBlock:
+def get_canonical_block_by_slot(self, slot: Slot) -> BaseBeaconBlock:
+def get_canonical_block_root(self, slot: Slot) -> Hash32:
+) -> Tuple[BaseBeaconBlock, Tuple[BaseBeaconBlock, ...], Tuple[BaseBeaconBlock, ...]]:
+A Chain is a combination of one or more ``StateMachine`` classes.  Each ``StateMachine``
+is associated with a range of slots. The Chain class acts as a wrapper around these other
+StateMachine classes, delegating operations to the appropriate StateMachine depending on the
+logger = logging.getLogger("eth2.beacon.chains.BeaconChain")
+chaindb_class = BeaconChainDB  # type: Type[BaseBeaconChainDB]
+def __init__(self, base_db: BaseAtomicDB) -> None:
+"The Chain class cannot be instantiated with an empty `sm_configuration`"
+# TODO implment validate_sm_configuration(self.sm_configuration)
+# validate_sm_configuration(self.sm_configuration)
+self.chaindb = self.get_chaindb_class()(base_db)
+def get_chaindb_class(cls) -> Type['BaseBeaconChainDB']:
+raise AttributeError("`chaindb_class` not set")
+genesis_block: BaseBeaconBlock) -> 'BaseBeaconChain':
+Initialize the ``BeaconChain`` from a genesis state.
+sm_class = cls.get_state_machine_class_for_block_slot(genesis_block.slot)
+if type(genesis_block) != sm_class.block_class:
+"Given genesis block class: {}, StateMachine.block_class: {}".format(
+chaindb = cls.get_chaindb_class()(db=base_db)
+return cls._from_genesis_block(base_db, genesis_block)
+genesis_block: BaseBeaconBlock) -> 'BaseBeaconChain':
+Initialize the ``BeaconChain`` from the genesis block.
+chaindb = cls.get_chaindb_class()(db=base_db)
+chaindb.persist_block(genesis_block, genesis_block.__class__)
+def get_state_machine_class(cls, block: BaseBeaconBlock) -> Type['BaseBeaconStateMachine']:
+Returns the ``StateMachine`` instance for the given block slot number.
+return cls.get_state_machine_class_for_block_slot(block.slot)
+def get_state_machine_class_for_block_slot(
+slot: Slot) -> Type['BaseBeaconStateMachine']:
+Return the ``StateMachine`` class for the given block slot number.
+raise AttributeError("Chain classes must define the StateMachines in sm_configuration")
+for start_slot, sm_class in reversed(cls.sm_configuration):
+raise StateMachineNotFound("No StateMachine available for block slot: #{0}".format(slot))
+def get_state_machine(self, at_block: BaseBeaconBlock=None) -> 'BaseBeaconStateMachine':
+Return the ``StateMachine`` instance for the given block number.
+sm_class = self.get_state_machine_class_for_block_slot(block.slot)
+def get_block_class(self, block_root: Hash32) -> Type[BaseBeaconBlock]:
+slot = self.chaindb.get_slot_by_root(block_root)
+sm_class = self.get_state_machine_class_for_block_slot(slot)
+block_params: FromBlockParams) -> BaseBeaconBlock:
+Passthrough helper to the ``StateMachine`` class of the block descending from the
+return self.get_state_machine_class_for_block_slot(
+slot=parent_block.slot + 1 if block_params.slot is None else block_params.slot,
+).create_block_from_parent(parent_block, block_params)
+def get_block_by_root(self, block_root: Hash32) -> BaseBeaconBlock:
+Return the requested block as specified by block hash.
+Raise ``BlockNotFound`` if there's no block with the given hash in the db.
+validate_word(block_root, title="Block Hash")
+block_class = self.get_block_class(block_root)
+return self.chaindb.get_block_by_root(block_root, block_class)
+def get_canonical_head(self) -> BaseBeaconBlock:
+Return the block at the canonical chain head.
+Raise ``CanonicalHeadNotFound`` if there's no head defined for the canonical chain.
+block_root = self.chaindb.get_canonical_head_root()
+block_class = self.get_block_class(block_root)
+return self.chaindb.get_block_by_root(block_root, block_class)
+def get_score(self, block_root: Hash32) -> int:
+Return the score of the block with the given hash.
+Raise ``BlockNotFound`` if there is no matching black hash.
+return self.chaindb.get_score(block_root)
+def ensure_block(self, block: BaseBeaconBlock=None) -> BaseBeaconBlock:
+Return ``block`` if it is not ``None``, otherwise return the block
+return self.create_block_from_parent(head, FromBlockParams())
+def get_canonical_block_by_slot(self, slot: Slot) -> BaseBeaconBlock:
+Return the block with the given number in the canonical chain.
+Raise ``BlockNotFound`` if there's no block with the given number in the
+return self.get_block_by_root(self.chaindb.get_canonical_block_root(slot))
+def get_canonical_block_root(self, slot: Slot) -> Hash32:
+Return the block hash with the given number in the canonical chain.
+Raise ``BlockNotFound`` if there's no block with the given number in the
+return self.chaindb.get_canonical_block_root(slot)
+) -> Tuple[BaseBeaconBlock, Tuple[BaseBeaconBlock, ...], Tuple[BaseBeaconBlock, ...]]:
+Import a complete block and returns a 3-tuple
+- a tuple of blocks which are now part of the canonical chain.
+- a tuple of blocks which were canonical and now are no longer canonical.
+parent_block = self.get_block_by_root(block.previous_block_root)
+"Attempt to import block #{}.  Cannot import block {} before importing "
+base_block_for_import = self.create_block_from_parent(
+state, imported_block = self.get_state_machine(base_block_for_import).import_block(block)
+validate_imported_block_unchanged(imported_block, block)
+# TODO: Now it just persists all state. Should design how to clean up the old state.
+) = self.chaindb.persist_block(imported_block, imported_block.__class__)
+'IMPORTED_BLOCK: slot %s | signed root %s',
+return imported_block, new_canonical_blocks, old_canonical_blocks
+# check dir(client) to find available options.
+# auto adjust host key verification with yes or no
+client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+# time for connecting to remote Cisco IOS
+addr = input('Provide IP address to connect to: ')
+client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+client.connect(addr,username=user,password=<PASSWORD>,allow_agent=False,look_for_keys=False)
+output = device_access.recv(55000).decode('ascii')
+THIS CODE IS FOR SINGLE COMMAND, FOR MULTIPLE COMMANDS CODE BELOW
+device_access.send("ter len 0\nshow run \n")
+# receive output from the device, convert it to byte-like format and print it
+print(device_access.recv(550000).decode('ascii'))
+f.write(device_access.recv(550000).decode('ascii'))"""
+<filename>graphdb/transformer.py<gh_stars>1-10
+A query transformer is a function that accepts a program and returns a program, plus a priority level.
+Higher priority transformers are placed closer to the front of the list. We’re ensuring is a function,
+because we’re going to evaluate it later 31 .
+We’ll assume there won’t be an enormous number of transformer additions,
+and walk the list linearly to add a new one.
+We’ll leave a note in case this assumption turns out to be false —
+a binary search is much more time-optimal for long lists,
+but adds a little complexity and doesn’t really speed up short lists.
+Dagoba.T = []                                                     # transformers (more than meets the eye)
+Dagoba.addTransformer = function(fun, priority) {
+return Dagoba.error('Invalid transformer function')
+for(var i = 0; i < Dagoba.T.length; i++)                        # OPT: binary search
+if(priority > Dagoba.T[i].priority) break
+Dagoba.T.splice(i, 0, {priority: priority, fun: fun})
+return Dagoba.T.reduce(function(acc, transformer) {
+Dagoba.addAlias = function(newname, oldname, defaults) {
+defaults = defaults || []                                       # default arguments for the alias
+Dagoba.addPipetype(newname, function() {})                      # because there's no method catchall in js
+Dagoba.addTransformer(function(program) {
+return [oldname, Dagoba.extend(step[1], defaults)]
+}, 100)                                                         # these need to run early, so they get a high priority
+Dagoba.extend = function(list, defaults) {
+return Object.keys(defaults).reduce(function(acc, key) {
+if(typeof list[key] != 'undefined') return acc
+<filename>yzcore/templates/project_template/src/const/_job.py
+Classe Responsável por fazer o output do boleto em html.
+:license: BSD, see LICENSE for more details.
+from itertools import izip_longest as zip_longest
+zip_longest  # chamando para evitar erro de nao uso do zip_longest
+Esta classe é responsável por imprimir o boleto em HTML.
+Outras classes podem ser implementadas no futuro com a mesma interface,
+Esta classe pode imprimir boletos em formato de carnê (2 boletos por
+:param file_descr: Um arquivo ou *file-like* class.
+:param landscape: Formato da folha. Usar ``True`` para boleto
+def __init__(self, file_descr, landscape=False):
+raise NotImplementedError('Em desenvolvimento...')
+tpl = string.Template(self._load_template('head.html'))
+self.html = tpl.substitute(title=self.title, width=self.width,
+pyboleto_dir = os.path.dirname(os.path.abspath(__file__))
+template_path = os.path.join(pyboleto_dir, 'templates', template)
+pyboleto_dir = os.path.dirname(os.path.abspath(__file__))
+image_path = os.path.join(pyboleto_dir, 'media', logo_image)
+def _drawReciboSacado(self, boletoDados):
+"""Imprime o Recibo do Sacado para modelo de página inteira
+:param boletoDados: Objeto com os dados do boleto a ser preenchido.
+Deve ser subclasse de :class:`pyboleto.data.BoletoData`
+:type boletoDados: :class:`pyboleto.data.BoletoData`
+tpl = string.Template(self._load_template('recibo_sacado.html'))
+img = codecs.open(self._load_image(boletoDados.logo_image))
+img_base64 = 'data:image/jpeg;base64,{0}'.format(aux)
+tpl_data['codigo_dv_banco'] = boletoDados.codigo_dv_banco
+tpl_data['cedente'] = boletoDados.cedente
+tpl_data['agencia_conta_cedente'] = boletoDados.agencia_conta_cedente
+tpl_data['cedente_documento'] = boletoDados.cedente_documento
+data_vencimento = boletoDados.data_vencimento
+tpl_data['data_vencimento'] = data_vencimento.strftime('%d/%m/%Y')
+tpl_data['sacado'] = boletoDados.sacado[0]
+tpl_data['nosso_numero_format'] = boletoDados.format_nosso_numero()
+tpl_data['numero_documento'] = boletoDados.numero_documento
+data_documento = boletoDados.data_documento
+tpl_data['data_documento'] = data_documento.strftime('%d/%m/%Y')
+tpl_data['cedente_endereco'] = boletoDados.cedente_endereco
+valor_doc = self._formataValorParaExibir(boletoDados.valor_documento)
+tpl_data['demonstrativo'] += '<p>{0}</p>'.format(dm)
+:param boletoDados: Objeto com os dados do boleto a ser preenchido.
+Deve ser subclasse de :class:`pyboleto.data.BoletoData`
+:type boletoDados: :class:`pyboleto.data.BoletoData`
+tpl = string.Template(self._load_template('recibo_caixa.html'))
+img = codecs.open(self._load_image(boletoDados.logo_image))
+img_base64 = 'data:image/jpeg;base64,{0}'.format(aux)
+tpl_data['codigo_dv_banco'] = boletoDados.codigo_dv_banco
+tpl_data['linha_digitavel'] = boletoDados.linha_digitavel
+data_vencimento = boletoDados.data_vencimento
+tpl_data['data_vencimento'] = data_vencimento.strftime('%d/%m/%Y')
+if isinstance(boletoDados.local_pagamento, unicode):
+tpl_data['local_pagamento'] = boletoDados.local_pagamento.encode
+tpl_data['local_pagamento'] = boletoDados.local_pagamento
+tpl_data['cedente'] = boletoDados.cedente
+tpl_data['agencia_conta_cedente'] = boletoDados.agencia_conta_cedente
+data_documento = boletoDados.data_documento
+tpl_data['data_documento'] = data_documento.strftime('%d/%m/%Y')
+tpl_data['numero_documento'] = boletoDados.numero_documento
+tpl_data['especie_documento'] = boletoDados.especie_documento
+data_process = boletoDados.data_processamento
+tpl_data['data_processamento'] = data_process.strftime('%d/%m/%Y')
+tpl_data['nosso_numero_format'] = boletoDados.format_nosso_numero()
+tpl_data['carteira'] = boletoDados.carteira
+tpl_data['especie'] = boletoDados.especie
+tpl_data['quantidade'] = boletoDados.quantidade
+valor = self._formataValorParaExibir(boletoDados.valor)
+valor_doc = self._formataValorParaExibir(boletoDados.valor_documento)
+tpl_data['instrucoes'] += '<p>{0}</p>'.format(instrucao)
+tpl_data['sacado_info'] += '<p>{0}</p>'.format(linha_sacado)
+tpl_data['barcode'] = self._codigoBarraI25(boletoDados.barcode)
+self.html += '<script>window.print();</script>'
+def drawBoletoCarneDuplo(self, boletoDados1, boletoDados2=None):
+"""Imprime um boleto tipo carnê com 2 boletos por página.
+:param boletoDados1: Objeto com os dados do boleto a ser preenchido.
+Deve ser subclasse de :class:`pyboleto.data.BoletoData`
+:param boletoDados2: Objeto com os dados do boleto a ser preenchido.
+Deve ser subclasse de :class:`pyboleto.data.BoletoData`
+:type boletoDados1: :class:`pyboleto.data.BoletoData`
+:type boletoDados2: :class:`pyboleto.data.BoletoData`
+raise NotImplementedError('Em desenvolvimento')
+Você pode chamar este método diversas vezes para criar um arquivo com
+:param boletoDados: Objeto com os dados do boleto a ser preenchido.
+Deve ser subclasse de :class:`pyboleto.data.BoletoData`
+:type boletoDados: :class:`pyboleto.data.BoletoData`
+self.html += '</div><div class="pagina">'
+def _formataValorParaExibir(self, nfloat):
+"""Imprime Código de barras otimizado para boletos
+http://en.wikipedia.org/wiki/Interleaved_2_of_5
+for digt1, digt2 in self._grouper(2, code):
+digt2_repr = map(lambda x: x + ' s', DIGITS[int(digt2)])
+digits.extend(chain(*zip(digt1_repr, digt2_repr)))
+result.append('<span class="{0}"></span>'.format(digit))
+def _grouper(self, n, iterable, fillvalue=None):
+"""grouper(3, 'ABCDEFG', 'x') --> ABC DEF Gxx"""
+return zip_longest(fillvalue=fillvalue, *args)
+img = imtreat.imageManagerClass.openImageFunction("../images/soleil.png", 0)
+img = imtreat.definedModesClass.detailEnhanceFunction(img)
+imtreat.imageManagerClass.saveImageFunction("/Téléchargements/", "image_1", ".png", img)
+#    Licensed under the Apache License, Version 2.0 (the "License"); you may
+#    not use this file except in compliance with the License. You may obtain
+#         http://www.apache.org/licenses/LICENSE-2.0
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+#    License for the specific language governing permissions and limitations
+hyperv_opt_group = cfg.OptGroup("hyperv",
+The hyperv feature allows you to configure the Hyper-V hypervisor
+driver to be used within an OpenStack deployment.
+Enables dynamic memory allocation (ballooning) when set to a value
+greater than 1. The value expresses the ratio between the total RAM
+assigned to an instance and its startup RAM amount. For example a
+ratio of 2.0 for an instance with 1024MB of RAM implies 512MB of
+* 1.0: Disables dynamic memory allocation (Default).
+* Float values greater than 1.0: Enables allocation of total implied
+cfg.BoolOpt('enable_instance_metrics_collection',
+Enables metrics collections for an instance by using Hyper-V's
+metric APIs. Collected data can be retrieved by other apps and
+The name of a Windows share mapped to the "instances_path" dir
+and used by the resize feature to copy files to the target host.
+If left blank, an administrative share (hidden network share) will
+be used, looking for the same "instances_path" used locally.
+* "": An administrative share will be used (Default).
+* "instances_path": The directory which will be used if this option
+This flag is needed to support live migration to hosts with
+different CPU features and checked during instance creation
+in order to limit the CPU features used by the instance.
+cfg.IntOpt('mounted_disk_query_retry_count',
+The number of times to retry checking for a mounted disk.
+The query runs until the device can be found or the retry
+* Positive integer values. Values greater than 1 is recommended
+* Time interval between disk mount retries is declared with
+"mounted_disk_query_retry_interval" option.
+cfg.IntOpt('mounted_disk_query_retry_interval',
+Interval between checks for a mounted disk, in seconds.
+* This option is meaningful when the mounted_disk_query_retry_count
+* The retry loop runs with mounted_disk_query_retry_count and
+mounted_disk_query_retry_interval configuration options.
+cfg.IntOpt('power_state_check_timeframe',
+The timeframe to be checked for instance power state changes.
+This option is used to fetch the state of the instance from Hyper-V
+through the WMI interface, within the specified timeframe.
+cfg.IntOpt('power_state_event_polling_interval',
+Instance power state change event polling frequency. Sets the
+listener interval for power state events to the given value.
+This option enhances the internal lifecycle notifications of
+instances that reboot themselves. It is unlikely that an operator
+qemu-img is required for some of the image related operations
+like converting between different image types. You can get it
+from here: (http://qemu.weilnetz.de/) or you can install the
+Cloudbase OpenStack Hyper-V Compute Driver
+(https://cloudbase.it/openstack-hyperv-driver/) which automatically
+sets the proper path for this config option. You can either give the
+full path of qemu-img.exe or set its path in the PATH environment
+variable and leave this option to the default value.
+* Name of the qemu-img executable, in case it is in the same
+directory as the nova-compute service or its path is in the
+* Path of qemu-img command (DRIVELETTER:\PATH\TO\QEMU-IMG\COMMAND).
+* If the config_drive_cdrom option is False, qemu-img will be used to
+convert the ISO to a VHD, otherwise the config drive will
+remain an ISO. To use config drive with Hyper-V, you must
+set the ``mkisofs_cmd`` value to the full path to an ``mkisofs.exe``
+The Hyper-V Virtual Switch is a software-based layer-2 Ethernet
+network switch that is available with the installation of the
+Hyper-V server role. The switch includes programmatically managed
+and extensible capabilities to connect virtual machines to both
+virtual networks and the physical network. In addition, Hyper-V
+Virtual Switch provides policy enforcement for security, isolation,
+and service levels. The vSwitch represented by this config option
+must be an external one (not internal or private).
+* If not provided, the first of a list of available vswitches
+Number of seconds to wait for instance to shut down after soft
+reboot request is made. We fall back to hard reboot if instance
+OpenStack can be configured to write instance metadata to a config drive, which
+is then attached to the instance before it boots. The config drive can be
+attached as a disk drive (default) or as a CD drive.
+* This option is meaningful with ``force_config_drive`` option set to ``True``
+or when the REST API call to create an instance will have
+* ``config_drive_format`` option must be set to ``iso9660`` in order to use
+* To use config drive with Hyper-V, you must set the
+``mkisofs_cmd`` value to the full path to an ``mkisofs.exe`` installation.
+Additionally, you must set the ``qemu_img_cmd`` value to the full path
+* You can configure the Compute service to always create a configuration
+drive by setting the ``force_config_drive`` option to ``True``.
+cfg.BoolOpt('config_drive_inject_password',
+When enabled, the admin password will be available from the config drive image.
+* This option is meaningful when used with other options that enable
+config drive usage with Hyper-V, such as ``force_config_drive``.
+The number of times to retry attaching a volume. Volume attachment
+is retried until success or the given retry count is reached.
+* Time interval between attachment attempts is declared with
+cfg.IntOpt('volume_attach_retry_interval',
+Interval between volume attachment attempts, in seconds.
+* This options is meaningful when volume_attach_retry_count
+* The retry loop runs with volume_attach_retry_count and
+volume_attach_retry_interval configuration options.
+This requires at least one DirectX 11 capable graphics adapter for
+Windows / Hyper-V Server 2012 R2 or newer and RDS-Virtualization
+Instances with RemoteFX can be requested with the following flavor
+**os:resolution**. Guest VM screen resolution size. Acceptable values::
+1024x768, 1280x1024, 1600x1200, 1920x1200, 2560x1600, 3840x2160
+``3840x2160`` is only available on Windows / Hyper-V Server 2016.
+**os:monitors**. Guest VM number of monitors. Acceptable values::
+[1, 4] - Windows / Hyper-V Server 2012 R2
+**os:vram**. Guest VM VRAM amount. Only available on
+Windows / Hyper-V Server 2016. Acceptable values::
+Use multipath connections when attaching iSCSI or FC disks.
+This requires the Multipath IO Windows feature to be enabled. MPIO must be
+List of iSCSI initiators that will be used for estabilishing iSCSI sessions.
+If none are specified, the Microsoft iSCSI initiator service will choose the
+conf.register_opts(hyperv_opts, group=hyperv_opt_group)
+words_list = requests.get("https://raw.githubusercontent.com/atebits/Words/master/Words/fr.txt").text
+words_list = filter(lambda x: len(x) > 4, words_list.split('\n'))
+path = input("Chemin d'écriture ? (words.txt) ")
+with open(path, "w", encoding="utf-8") as file:
+from simplegallery.upload.uploader_factory import get_uploader
+class AWSUploaderTestCase(unittest.TestCase):
+self.assertFalse(uploader.check_location(''))
+def test_upload_gallery(self, subprocess_run):
+subprocess_run.return_value = subprocess.CompletedProcess([], returncode=0)
+gallery_path = os.path.join(tempdir.path, 'index.html')
+uploader.upload_gallery('s3://testbucket/path/', gallery_path)
+['aws', 's3', 'sync', gallery_path, 's3://testbucket/path/', '--exclude', '.DS_Store'])
+uploader.upload_gallery('testbucket/path/', gallery_path)
+['aws', 's3', 'sync', gallery_path, 's3://testbucket/path/', '--exclude', '.DS_Store'])
+# Test upload to bucket without trailing /
+uploader.upload_gallery('s3://testbucket/path', gallery_path)
+['aws', 's3', 'sync', gallery_path, 's3://testbucket/path/', '--exclude', '.DS_Store'])
+<reponame>kithsirij/NLP-based-Syllabus-Coverage-Exam-paper-checker-Tool
+# Form implementation generated from reading ui file 'add_subject.ui'
+# Created by: PyQt4 UI code generator 4.11.4
+# WARNING! All changes made in this file will be lost!
+_encoding = QtGui.QApplication.UnicodeUTF8
+return QtGui.QApplication.translate(context, text, disambig, _encoding)
+return QtGui.QApplication.translate(context, text, disambig)
+Dialog_add_subject.setObjectName(_fromUtf8("Dialog_add_subject"))
+font.setFamily(_fromUtf8("Times New Roman"))
+Dialog_add_subject.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+icon.addPixmap(QtGui.QPixmap(_fromUtf8("Qt_interface/SE_syllabus/4zIr6y.jpg")), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+self.lbl_subject_name = QtGui.QLabel(Dialog_add_subject)
+self.lbl_subject_name.setGeometry(QtCore.QRect(50, 235, 131, 21))
+font.setFamily(_fromUtf8("Times New Roman"))
+self.lbl_subject_name.setObjectName(_fromUtf8("lbl_subject_name"))
+self.label_add_subject = QtGui.QLabel(Dialog_add_subject)
+self.label_add_subject.setGeometry(QtCore.QRect(220, 30, 151, 31))
+font.setFamily(_fromUtf8("Times New Roman"))
+self.label_add_subject.setObjectName(_fromUtf8("label_add_subject"))
+self.lineEdit_subject_name = QtGui.QLineEdit(Dialog_add_subject)
+self.lineEdit_subject_name.setGeometry(QtCore.QRect(190, 230, 321, 31))
+font.setFamily(_fromUtf8("Times New Roman"))
+self.lineEdit_subject_name.setObjectName(_fromUtf8("lineEdit_subject_name"))
+self.label_year = QtGui.QLabel(Dialog_add_subject)
+self.label_year.setGeometry(QtCore.QRect(50, 95, 81, 21))
+font.setFamily(_fromUtf8("Times New Roman"))
+self.label_year.setObjectName(_fromUtf8("label_year"))
+self.label_semester = QtGui.QLabel(Dialog_add_subject)
+self.label_semester.setGeometry(QtCore.QRect(50, 165, 91, 21))
+font.setFamily(_fromUtf8("Times New Roman"))
+self.label_semester.setObjectName(_fromUtf8("label_semester"))
+self.pushButton_save = QtGui.QPushButton(Dialog_add_subject)
+self.pushButton_save.setGeometry(QtCore.QRect(190, 290, 111, 31))
+font.setFamily(_fromUtf8("Times New Roman"))
+icon1.addPixmap(QtGui.QPixmap(_fromUtf8("Qt_interface/SE_syllabus/Save-as.png")), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+self.pushButton_save.setIconSize(QtCore.QSize(20, 20))
+self.pushButton_save.setObjectName(_fromUtf8("pushButton_save"))
+self.pushButton_cancel = QtGui.QPushButton(Dialog_add_subject)
+self.pushButton_cancel.setGeometry(QtCore.QRect(340, 290, 111, 31))
+font.setFamily(_fromUtf8("Times New Roman"))
+icon2.addPixmap(QtGui.QPixmap(_fromUtf8("Qt_interface/SE_syllabus/if_draw-08_725558.png")), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+self.pushButton_cancel.setIconSize(QtCore.QSize(20, 20))
+self.pushButton_cancel.setObjectName(_fromUtf8("pushButton_cancel"))
+self.comboBox_year = QtGui.QComboBox(Dialog_add_subject)
+self.comboBox_year.setGeometry(QtCore.QRect(190, 91, 111, 31))
+font.setFamily(_fromUtf8("Times New Roman"))
+self.comboBox_year.setObjectName(_fromUtf8("comboBox_year"))
+self.comboBox_semester = QtGui.QComboBox(Dialog_add_subject)
+self.comboBox_semester.setGeometry(QtCore.QRect(190, 160, 111, 31))
+font.setFamily(_fromUtf8("Times New Roman"))
+self.comboBox_semester.setObjectName(_fromUtf8("comboBox_semester"))
+QtCore.QObject.connect(self.pushButton_cancel, QtCore.SIGNAL(_fromUtf8("clicked()")), self.lineEdit_subject_name.clear)
+QtCore.QMetaObject.connectSlotsByName(Dialog_add_subject)
+def retranslateUi(self, Dialog_add_subject):
+Dialog_add_subject.setWindowTitle(_translate("Dialog_add_subject", "Dialog", None))
+self.lbl_subject_name.setText(_translate("Dialog_add_subject", "SUBJECT NAME", None))
+self.label_add_subject.setText(_translate("Dialog_add_subject", "ADD SUBJECT", None))
+self.label_year.setText(_translate("Dialog_add_subject", "YEAR", None))
+self.label_semester.setText(_translate("Dialog_add_subject", "SEMESTER", None))
+self.pushButton_save.setText(_translate("Dialog_add_subject", "SAVE", None))
+self.pushButton_cancel.setText(_translate("Dialog_add_subject", "CANCEL", None))
+PRE_SYNCDB_ARGS = ['app', 'create_models', 'verbosity', 'interactive', 'db']
+def __call__(self, signal, sender, **kwargs):
+self.call_counter = self.call_counter + 1
+Special receiver for handle the fact that test runner calls syncdb for
+several databases and several times for some of them.
+def __call__(self, signal, sender, **kwargs):
+# Although test runner calls syncdb for several databases,
+# testing for only one of them is quite sufficient.
+self.call_counter = self.call_counter + 1
+# we need to test only one call of syncdb
+signals.pre_syncdb.disconnect(pre_syncdb_receiver, sender=models)
+# We connect receiver here and not in unit test code because we need to
+# connect receiver before test runner creates database.  That is, sequence of
+#   3. Test runner calls syncdb for create default database.
+#   4. Test runner execute our unit test code.
+signals.pre_syncdb.connect(pre_syncdb_receiver, sender=models)
+self.assertEqual(pre_syncdb_receiver.call_counter, 1)
+signals.pre_syncdb.connect(r, sender=models)
+management.call_command('syncdb', database=SYNCDB_DATABASE,
+verbosity=SYNCDB_VERBOSITY, interactive=SYNCDB_INTERACTIVE,
+load_initial_data=False, stdout=six.StringIO())
+self.assertEqual(set(args), set(PRE_SYNCDB_ARGS))
+self.assertEqual(args['verbosity'], SYNCDB_VERBOSITY)
+self.assertEqual(args['interactive'], SYNCDB_INTERACTIVE)
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+from pytorch_lightning.plugins.environments.cluster_environment import ClusterEnvironment
+class SLURMEnvironment(ClusterEnvironment):
+"""Cluster environment for training on a cluster managed by SLURM."""
+def creates_processes_externally(self) -> bool:
+"""Returns ``True`` if the current process was launched on a SLURM cluster."""
+slurm_nodelist = os.environ.get("SLURM_NODELIST")
+root_node = slurm_nodelist.split(" ")[0].split(",")[0]
+root_node = self.resolve_root_node_address(root_node)
+log.debug(f"MASTER_ADDR: {os.environ['MASTER_ADDR']}")
+# this way every process knows what port to use
+default_port = os.environ.get("SLURM_JOB_ID")
+# use the last 4 numbers in the job id as the id
+os.environ["MASTER_PORT"] = str(default_port)
+log.debug(f"MASTER_PORT: {os.environ['MASTER_PORT']}")
+def set_world_size(self, size: int) -> None:
+log.debug("SLURMEnvironment.set_world_size was called, but setting world size is not allowed. Ignored.")
+def set_global_rank(self, rank: int) -> None:
+log.debug("SLURMEnvironment.set_global_rank was called, but setting global rank is not allowed. Ignored.")
+def resolve_root_node_address(self, root_node: str) -> str:
+name, numbers = root_node.split("[", maxsplit=1)
+number = numbers.split(",", maxsplit=1)[0]
+Use the trackball as a mouse in Raspbian, with right-click
+raise RuntimeError("xte not found. Did you sudo apt install xautomation?")
+up, down, left, right, switch, state = trackball.read()
+cmd = 'xte "mousermove {} {}"'.format(int(x), int(y))
+<filename>garaged/src/garage/tf/regressors/gaussian_mlp_regressor_model.py
+from garage.experiment import deterministic
+from garage.tf.models import GaussianMLPModel
+class GaussianMLPRegressorModel(GaussianMLPModel):
+"""GaussianMLPRegressor based on garage.tf.models.Model class.
+This class can be used to perform regression by fitting a Gaussian
+input_shape (tuple[int]): Input shape of the training data.
+output_dim (int): Output dimension of the model.
+name (str): Model name, also the variable scope.
+hidden_sizes (list[int]): Output dimension of dense layer(s) for
+the MLP for mean. For example, (32, 32) means the MLP consists
+of two hidden layers, each with 32 hidden units.
+hidden_nonlinearity (callable): Activation function for intermediate
+dense layer(s). It should return a tf.Tensor. Set it to
+hidden_w_init (callable): Initializer function for the weight
+of intermediate dense layer(s). The function should return a
+hidden_b_init (callable): Initializer function for the bias
+of intermediate dense layer(s). The function should return a
+output_nonlinearity (callable): Activation function for output dense
+layer. It should return a tf.Tensor. Set it to None to
+output_w_init (callable): Initializer function for the weight
+of output dense layer(s). The function should return a
+output_b_init (callable): Initializer function for the bias
+of output dense layer(s). The function should return a
+adaptive_std (bool): Is std a neural network. If False, it will be a
+std_share_network (bool): Boolean for whether mean and std share
+std_hidden_sizes (list[int]): Output dimension of dense layer(s) for
+the MLP for std. For example, (32, 32) means the MLP consists
+of two hidden layers, each with 32 hidden units.
+min_std (float): If not None, the std is at least the value of min_std,
+max_std (float): If not None, the std is at most the value of max_std,
+std_hidden_nonlinearity (callable): Nonlinearity for each hidden layer
+std_hidden_w_init (callable): Initializer function for the weight
+of intermediate dense layer(s) in the std network.
+std_hidden_b_init (callable): Initializer function for the bias
+of intermediate dense layer(s) in the std network.
+std_output_nonlinearity (callable): Activation function for output
+dense layer in the std network. It should return a tf.Tensor. Set
+it to None to maintain a linear activation.
+std_output_w_init (callable): Initializer function for the weight
+of output dense layer(s) in the std network.
+std_parameterization (str): How the std should be parametrized. There
+- exp: the logarithm of the std will be stored, and applied a
+- softplus: the std will be computed as log(1+exp(x))
+layer_normalization (bool): Bool for using layer normalization or not.
+hidden_w_init=tf.initializers.glorot_uniform(
+seed=deterministic.get_tf_seed_stream()),
+output_w_init=tf.initializers.glorot_uniform(
+seed=deterministic.get_tf_seed_stream()),
+std_hidden_w_init=tf.initializers.glorot_uniform(
+seed=deterministic.get_tf_seed_stream()),
+std_hidden_b_init=tf.zeros_initializer(),
+std_output_w_init=tf.initializers.glorot_uniform(
+seed=deterministic.get_tf_seed_stream()),
+std_hidden_nonlinearity=std_hidden_nonlinearity,
+std_output_nonlinearity=std_output_nonlinearity,
+std_parameterization=std_parameterization,
+list[str]: List of key(str) for the network outputs.
+'normalized_dist', 'normalized_mean', 'normalized_log_std', 'dist',
+'mean', 'log_std', 'x_mean', 'x_std', 'y_mean', 'y_std'
+def _build(self, state_input, name=None):
+"""Build model given input placeholder(s).
+state_input (tf.Tensor): Place holder for state input.
+name (str): Inner model name, also the variable scope of the
+tfp.distributions.MultivariateNormalDiag: Normlizaed distribution.
+tfp.distributions.MultivariateNormalDiag: Vanilla distribution.
+with tf.compat.v1.variable_scope('normalized_vars'):
+normalized_xs_var = (state_input - x_mean_var) / x_std_var
+_, normalized_dist_mean, normalized_dist_log_std = super()._build(
+# Since regressor expects [N, *dims], we need to squeeze the extra
+normalized_dist_log_std = tf.squeeze(normalized_dist_log_std, 1)
+means_var = normalized_dist_mean * y_std_var + y_mean_var
+log_stds_var = normalized_dist_log_std + tf.math.log(y_std_var)
+normalized_dist = tfp.distributions.MultivariateNormalDiag(
+scale_diag=tf.exp(normalized_dist_log_std))
+vanilla_dist = tfp.distributions.MultivariateNormalDiag(
+loc=means_var, scale_diag=tf.exp(log_stds_var))
+return (normalized_dist, normalized_dist_mean, normalized_dist_log_std,
+vanilla_dist, means_var, log_stds_var, x_mean_var, x_std_var,
+It copies the configuration and parameters of the primitive.
+name (str): Name of the newly created model. It has to be
+different from source model if cloned under the same
+garage.tf.policies.GaussianMLPModel: Newly cloned model.
+hidden_nonlinearity=self._hidden_nonlinearity,
+output_nonlinearity=self._output_nonlinearity,
+std_share_network=self._std_share_network,
+std_hidden_nonlinearity=self._std_hidden_nonlinearity,
+std_hidden_w_init=self._std_hidden_w_init,
+std_hidden_b_init=self._std_hidden_b_init,
+std_output_nonlinearity=self._std_output_nonlinearity,
+std_output_w_init=self._std_output_w_init,
+std_parameterization=self._std_parameterization,
+layer_normalization=self._layer_normalization)
+new_regressor.parameters = self.parameters
+import torchvision.transforms as transforms
+from extensions.utils import progress_bar
+from extensions.model_refinery_wrapper import ModelRefineryWrapper
+from extensions.refinery_loss import RefineryLoss
+parser = argparse.ArgumentParser(description='PyTorch imagenet inference')
+parser.add_argument('--datadir', help='path to dataset')
+parser.add_argument('--inputdir', help='path to input model')
+valdir = os.path.join(args.datadir, 'val')
+normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+testset = datasets.ImageFolder(valdir, transform_test)
+testloader = torch.utils.data.DataLoader(testset, batch_size=1000, shuffle=False, pin_memory=True, num_workers=30)
+print('Using input path: %s' % args.inputdir)
+label_refinery=torch.load('./resnet50.t7')
+net = ModelRefineryWrapper(net, label_refinery)
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+print("Let's use", torch.cuda.device_count(), "GPUs!")
+"""Computes the precision@k for the specified values of k"""
+_, pred = output.topk(maxk, 1, True, True)
+correct = pred.eq(target.view(1, -1).expand_as(pred))
+correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+for batch_idx, (inputs, targets) in enumerate(testloader):
+inputs, targets = inputs.cuda(device), targets.cuda(device)
+prec1, prec5 = accuracy(outputs, targets, topk=(1, 5))
+progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+% (test_loss/(batch_idx+1), 100.*float(correct_1)/float(total), correct_1, total))
+return 100.*float(correct_1)/float(total),100.*float(correct_5)/float(total),test_loss
+print('top-1 accuracy: {0:.3f}%, top-5 accuracy: {1:.3f}%'.format(acc1,acc5))
+<filename>paccmann_chemistry/utils/hyperparams.py
+from .search import SamplingSearch, GreedySearch, BeamSearch
+# Copyright (c) 2021 The GPflux Contributors.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+from gpflow.kullback_leiblers import gauss_kl
+from gpflux.encoders import DirectlyParameterizedNormalDiag
+from gpflux.layers import LatentVariableLayer, LayerWithObservations, TrackableLayer
+return tfp.distributions.MultivariateNormalDiag(loc=np.zeros(w_dim), scale_diag=np.ones(w_dim))
+mvn = tfp.distributions.MultivariateNormalTriL(mean, scale_tri_l)
+mvn_diag = tfp.distributions.MultivariateNormalDiag(mean, std)
+@pytest.mark.parametrize("distribution, w_dim", get_distributions_with_w_dim())
+lv = LatentVariableLayer(encoder=None, prior=distribution)
+posterior = lv.distribution_class(**posterior_params)
+@pytest.mark.parametrize("w_dim", [1, 5])
+def test_local_kl_gpflow_consistency(w_dim):
+encoder = DirectlyParameterizedNormalDiag(num_data, w_dim, means)
+lv = LatentVariableLayer(encoder=encoder, prior=_zero_one_normal_prior(w_dim))
+[np.random.randn(num_data, 3), np.random.randn(num_data, 2)]
+q_sqrt = posteriors.parameters["scale_diag"]
+gpflow_local_kls = gauss_kl(q_mu, q_sqrt)
+tfp_local_kls = tf.reduce_sum(lv._local_kls(posteriors))
+np.testing.assert_allclose(tfp_local_kls, gpflow_local_kls, rtol=1e-10)
+return np.allclose(actual, self.expected, equal_nan=True)
+@pytest.mark.parametrize("w_dim", [1, 5])
+def test_latent_variable_layer_losses(mocker, w_dim):
+prior = tfp.distributions.MultivariateNormalDiag(
+scale_diag=np.random.randn(*prior_shape) ** 2,
+posteriors = tfp.distributions.MultivariateNormalDiag(
+scale_diag=np.random.randn(*posteriors_shape) ** 2,
+encoder = mocker.Mock(return_value=(posteriors.loc, posteriors.scale.diag))
+lv = LatentVariableLayer(encoder=encoder, prior=prior)
+inputs = np.full((num_data, x_dim), np.nan)
+targets = np.full((num_data, y_dim), np.nan)
+encoder_inputs = np.concatenate(observations, axis=-1)
+_ = lv(inputs, observations=observations, training=True)
+# assert_called_once_with uses == for comparison which fails on arrays
+encoder.assert_called_once_with(ArrayMatcher(encoder_inputs), training=True)
+expected_loss = [tf.reduce_mean(posteriors.kl_divergence(prior))]
+np.testing.assert_equal(lv.losses, expected_loss)  # also checks shapes match
+@pytest.mark.parametrize("w_dim", [1, 5])
+@pytest.mark.parametrize("seed2", [None, 42])
+def test_latent_variable_layer_samples(mocker, test_data, w_dim, seed2):
+prior = tfp.distributions.MultivariateNormalDiag(
+scale_diag=np.random.randn(*prior_shape) ** 2,
+posteriors = tfp.distributions.MultivariateNormalDiag(
+scale_diag=np.random.randn(*posteriors_shape) ** 2,
+encoder = mocker.Mock(return_value=(posteriors.loc, posteriors.scale.diag))
+lv = LatentVariableLayer(prior=prior, encoder=encoder)
+prior_expected = np.concatenate([inputs, prior.sample(num_data, seed=seed2)], axis=-1)
+np.testing.assert_array_equal(sample_prior, prior_expected)
+sample_posterior = lv(inputs, observations=[inputs, targets], training=True, seed=seed2)
+posterior_expected = np.concatenate([inputs, posteriors.sample(seed=seed2)], axis=-1)
+np.testing.assert_array_equal(sample_posterior, posterior_expected)
+def test_no_tensorflow_metaclass_overwritten():
+LayerWithObservations is a subclass of tf.keras.layers.Layer (via TrackableLayer);
+this test ensures that TrackableLayer does not have a metaclass, and hence by adding
+the ABCMeta to LayerWithObservations we are not accidentally removing some required
+assert LayerWithObservations.__bases__ == (TrackableLayer,)
+assert type(LayerWithObservations) is abc.ABCMeta
+<reponame>actingweb/box-actingweb<filename>aw-actor-trust.py
+from google.appengine.ext.webapp import template
+# GET /trust with query parameters (relationship, type, and peerid) to retrieve trust relationships (auth: only creator and admins allowed)
+# POST /trust with json body to initiate a trust relationship between this
+#   actor and another (reciprocal relationship) (auth: only creator and admins allowed)
+# POST /trust/{relationship} with json body to create new trust
+#   relationship (see config.py for default relationship and auto-accept, no
+# GET /trust/{relationship}}/{actorid} to get details on a specific relationship (auth: creator, admin, or peer secret)
+# POST /trust/{relationship}}/{actorid} to send information to a peer about changes in the relationship
+# PUT /trust/{relationship}}/{actorid} with a json body to change details on a relationship (baseuri, secret, desc) (auth: creator,
+# DELETE /trust/{relationship}}/{actorid} to delete a relationship (with
+#   ?peer=true if the delete is from the peer) (auth: creator, admin, or
+class rootHandler(webapp2.RequestHandler):
+if self.request.get('_method') == 'POST':
+(Config, myself, check) = auth.init_actingweb(appreq=self,
+if not myself or check.response["code"] != 200:
+if not check.checkAuthorisation(path='trust', method='GET'):
+relationship = self.request.get('relationship')
+relationships = myself.getTrustRelationships(
+relationship=relationship, peerid=peerid, type=type)
+self.response.set_status(404, 'Not found')
+self.response.headers["Content-Type"] = "application/json"
+(Config, myself, check) = auth.init_actingweb(appreq=self,
+if not myself or check.response["code"] != 200:
+if not check.checkAuthorisation(path='trust', method='POST'):
+relationship = Config.default_relationship
+params = json.loads(self.request.body.decode('utf-8', 'ignore'))
+relationship = self.request.get('relationship')
+self.response.set_status(400, 'Missing peer URL')
+new_trust = myself.createReciprocalTrust(
+url=url, secret=secret, desc=desc, relationship=relationship, type=type)
+self.response.set_status(408, 'Unable to create trust relationship')
+"Location", str(Config.root + myself.id + '/trust/' + new_trust.relationship + '/' + new_trust.peerid))
+'peer_approved': new_trust.peer_approved,
+self.response.headers["Content-Type"] = "application/json"
+# Handling requests to /trust/*, e.g. /trust/friend
+class relationshipHandler(webapp2.RequestHandler):
+if self.request.get('_method') == 'POST':
+self.response.set_status(404, "Not found")
+(Config, myself, check) = auth.init_actingweb(appreq=self,
+id=id, path='trust', subpath=relationship, add_response=False)
+self.response.set_status(404, "Not found")
+if not check.checkAuthorisation(path='trust', method='POST'):
+params = json.loads(self.request.body.decode('utf-8', 'ignore'))
+self.response.set_status(400, 'No json content')
+myself.setProperty('trustee_root', trustee_root)
+self.response.set_status(204, 'No content')
+(Config, myself, check) = auth.init_actingweb(appreq=self,
+self.response.set_status(404, "Not found")
+if not check.checkAuthorisation(path='trust', method='DELETE'):
+self.response.set_status(204, 'No content')
+(Config, myself, check) = auth.init_actingweb(appreq=self,
+if not check.checkAuthorisation(path='trust', subpath='<type>', method='POST'):
+params = json.loads(self.request.body.decode('utf-8', 'ignore'))
+self.response.set_status(400, 'No json content')
+if len(baseuri) == 0 or len(peerid) == 0 or len(type) == 0:
+self.response.set_status(400, 'Missing mandatory attributes')
+if Config.auto_accept_default_relationship and Config.default_relationship == relationship:
+# Since we received a request for a relationship, assume that peer has approved
+new_trust = myself.createVerifiedTrust(baseuri=baseuri, peerid=peerid, approved=approved, secret=secret,
+verificationToken=verificationToken, type=type, peer_approved=True, relationship=relationship, desc=desc)
+self.response.set_status(403, 'Forbidden')
+"Location", str(Config.root + myself.id + '/trust/' + new_trust.relationship + "/" + new_trust.peerid))
+'peer_approved': new_trust.peer_approved,
+self.response.headers["Content-Type"] = "application/json"
+self.response.set_status(202, 'Accepted')
+# Handling requests to specific relationships, e.g. /trust/friend/12f2ae53bd
+class trustHandler(webapp2.RequestHandler):
+if self.request.get('_method') == 'DELETE':
+logging.debug('GET trust headers: ' + str(self.request.headers))
+(Config, myself, check) = auth.init_actingweb(appreq=self,
+id=id, path='trust', subpath=relationship)
+if not myself or check.response["code"] != 200:
+if not check.checkAuthorisation(path='trust', subpath='<type>/<id>', method='GET', peerid=peerid):
+relationships = myself.getTrustRelationships(
+relationship=relationship, peerid=peerid)
