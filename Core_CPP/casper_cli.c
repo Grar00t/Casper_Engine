@@ -103,7 +103,9 @@ int main(int argc,char **argv){
     if(pn<0 || (size_t)pn>=sizeof(proof_path)){if(kb)niyah_rule_free(kb);casper_rag_free(ctx);return 3;}
     if(niyah_proof_save(proof_path,proof_bytes,query,answer,rules_path)!=0){
         fprintf(stderr,"[casper] proof write failed: %s\n",proof_path);
-        if(kb)niyah_rule_free(kb);casper_rag_free(ctx);return 1;
+        if(kb){niyah_rule_free(kb);}
+        casper_rag_free(ctx);
+        return 1;
     }
 
     printf("{\n  \"query\":");json_str(stdout,query);printf(",\n  \"answer\":");json_str(stdout,answer);printf(",\n");
