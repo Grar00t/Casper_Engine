@@ -189,7 +189,8 @@ static void interactive_loop(NiyahModel *m, NiyahRuleKB *rules) {
         (void)printf("> "); (void)fflush(stdout);
         if(!fgets(line,sizeof(line),stdin))break;
         size_t len=strlen(line); while(len&&(line[len-1]=='\n'||line[len-1]=='\r'))line[--len]='\0';
-        if(!len)continue; if(!strcmp(line,"quit")||!strcmp(line,"exit"))break;
+        if(!len) continue;
+        if(!strcmp(line,"quit")||!strcmp(line,"exit")) break;
         char *response=niyah_hybrid_generate(m,line,&opts,&sampler,NULL);
         if(response){(void)printf("%s\n",response);free(response);} else (void)printf("[no response]\n");
         sampler.seed+=7919u;
