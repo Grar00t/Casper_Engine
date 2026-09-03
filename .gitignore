@@ -1,58 +1,86 @@
+# ---- Build output --------------------------------------------------------
+build/
+dist/
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.a
+*.lib
+*.pdb
+*.ilk
+
+# Extensionless build artifacts.
+# These names were missing before, which is why casper_engine (137880 B) and
+# Core_CPP/trainer (28824 B) ended up committed.
+casper_engine
+tokenizer_test
+Core_CPP/casper
+Core_CPP/trainer
+Core_CPP/niyah
+Core_CPP/niyah_hybrid
+Core_CPP/bench_niyah
 niyah
+niyah_hybrid
+niyah_trainer
 niyah_san
+niyah_v3
 niyah_v22
 niyah_debug
 niyah_pure_engine
-niyah_trainer
-niyah_v3
-niyah_trained.bin
-quran_arabic.txt
-sovereign_knowledge_data.txt
-*.bin
-*.o
-*.obj
-*.zip
-*.bak
-*.log
-UI_CSharp/bin/
-UI_CSharp/obj/
-sessions/
-memory/
-my-worker/
-Data_Training/sources/train.txt
-Data_Training/sources/quran_arabic.txt
-niyah_hybrid
 test_reasoner
 test_csp
 test_rules
 test_proof
-deploy.sh
-upgrade_and_deploy.sh
+
+# ---- Model weights ------------------------------------------------------
+*.bin
+*.gguf
+*.safetensors
+niyah_trained.bin
+
+# ---- Training corpora (large and regenerable) ---------------------------
+Data_Training/sources/train.txt
+Data_Training/sources/quran_arabic.txt
+Data_Training/sources/languages/
+Data_Training/sources/programming/
+quran_arabic.txt
+sovereign_knowledge_data.txt
+
+# ---- Secrets ------------------------------------------------------------
+.env
+*.env
 .hf_secret
-*.obj
-*.exe
-*.tmp
-Build_Report.md
-Compile_Errors.md
-Architecture_Review.md
-Missing_Functions.md
-Refactor_Plan.md
-Roadmap.md
-*.obj
-*.exe
-*.tmp
-Build_Report.md
-Compile_Errors.md
-Architecture_Review.md
-Missing_Functions.md
-Refactor_Plan.md
-Roadmap.md
-
-dist/
-
-# Secrets
 niyah_engine_local/.env
-haven_ide_source/
-scripts/gen_html.py
+
+# ---- Node ---------------------------------------------------------------
+node_modules/
+
+# ---- .NET ---------------------------------------------------------------
+UI_CSharp/bin/
+UI_CSharp/obj/
+
+# ---- Runtime state ------------------------------------------------------
+sessions/
+memory/
+*.log
+*.tmp
+*.bak
+*.zip
 *.crdownload
 
+# ---- Local-only trees and helpers ---------------------------------------
+my-worker/
+haven_ide_source/
+deploy.sh
+upgrade_and_deploy.sh
+scripts/gen_html.py
+
+# ---- Generated reports --------------------------------------------------
+Build_Report.md
+Compile_Errors.md
+Architecture_Review.md
+Missing_Functions.md
+Refactor_Plan.md
+Roadmap.md

@@ -1,0 +1,28 @@
+# Normalise line endings. The tree previously mixed CRLF and LF inside a
+# single file, which made diffs noisy and shell scripts fail under bash.
+* text=auto eol=lf
+
+*.c    text eol=lf
+*.h    text eol=lf
+*.sh   text eol=lf
+*.py   text eol=lf
+*.js   text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.asm  text eol=lf
+*.nrule text eol=lf
+
+# PowerShell and MSBuild expect CRLF.
+*.ps1     text eol=crlf
+*.csproj  text eol=crlf
+*.xaml    text eol=crlf
+*.manifest text eol=crlf
+
+# Never normalise these.
+*.bin         binary
+*.gguf        binary
+*.safetensors binary
+*.exe         binary
+*.dll         binary
+*.png         binary
+*.jpg         binary

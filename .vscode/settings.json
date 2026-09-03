@@ -1,5 +1,5 @@
 {
-    "chat.permissions.default": "autopilot",
+    "chat.permissions.default": "ask",
     "markdown.validate.enabled": true,
     "dotnetAcquisitionExtension.allowInvalidPaths": true,
     "dotnetAcquisitionExtension.enablePreviewFeatures": true,
@@ -27,5 +27,6 @@
     "dotnet.testWindow.disableBuildOnRun": true,
     "dotnet.projectsystem.cacheInProjectFolder": true,
     "dotnet.server.suppressMiscellaneousFilesToasts": true,
-    "dotnetAcquisitionExtension.showResetDataCommand": true
+    "dotnetAcquisitionExtension.showResetDataCommand": true,
+    "files.eol": "\n"
 }
