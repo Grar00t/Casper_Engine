@@ -21,8 +21,7 @@ omitted 19 that do. It also claimed "6 directories, 37 files".
 │   ├── bench_niyah.c
 │   ├── casper_cli.c              # CLI entry point, emits the JSON contract
 │   ├── casper_rag.c              # search transport, parser, ranker
-│   ├── casper_rag.h
-│   ├── casper_search.h           # declared but included by no source file
+│   ├── casper_rag.h              # the live search contract
 │   ├── constraint_solver.c
 │   ├── constraint_solver.h
 │   ├── hybrid_reasoner.c
@@ -39,9 +38,16 @@ omitted 19 that do. It also claimed "6 directories, 37 files".
 │   ├── rule_parser.c
 │   └── rule_parser.h
 ├── Data_Training/
-│   ├── safety.nrule              # 1252 B
+│   ├── safety.nrule                      # 1252 B
 │   ├── sources/
-│   └── sovereign_knowledge.txt   # 134 B
+│   │   ├── languages/
+│   │   │   └── en_ar.txt                 # 379922 B
+│   │   ├── programming/
+│   │   │   └── code_cpp_assembly.txt     # 123733 B
+│   │   ├── quran/
+│   │   │   └── test.txt                  # 17 B
+│   │   └── test.txt                      # 17 B
+│   └── sovereign_knowledge.txt           # 134 B
 ├── Math_ASM/
 │   └── avx_mult.asm              # 714 B, not referenced by scripts/build.sh
 ├── UI_CSharp/
@@ -88,6 +94,29 @@ omitted 19 that do. It also claimed "6 directories, 37 files".
 └── tokenizer.c
 ```
 
+## Training data
+
+Measured with `find Data_Training -type f -printf '%s %p\n'`, not inferred from
+the top-level listing:
+
+| Path | Bytes |
+| --- | --- |
+| `Data_Training/sources/languages/en_ar.txt` | 379922 |
+| `Data_Training/sources/programming/code_cpp_assembly.txt` | 123733 |
+| `Data_Training/safety.nrule` | 1252 |
+| `Data_Training/sovereign_knowledge.txt` | 134 |
+| `Data_Training/sources/test.txt` | 17 |
+| `Data_Training/sources/quran/test.txt` | 17 |
+| **total** | **505075** |
+
+It is raw text, not instruction pairs. It is enough to exercise the tokenizer and
+the byte-level path; it is not a supervised fine-tuning set.
+
+`get_real_data.py` writes `sources/languages/ar.txt`, `sources/languages/en.txt`
+and `sources/programming/code_c.txt` -- none of which are the files above. A
+fetch therefore grows a second, parallel set of filenames instead of extending
+the corpus. Pick one naming scheme before the next fetch.
+
 ## Build artifacts
 
 `scripts/build.sh` writes every binary to `build/`, which is ignored. Nothing
@@ -98,6 +127,10 @@ their names were absent from `.gitignore`:
 | --- | --- | --- |
 | `casper_engine` | 137880 B | removed |
 | `Core_CPP/trainer` | 28824 B | removed |
+
+Both are gone from the tree and still present in history, so a clone still pays
+for them. Removing them from history rewrites every commit id and is a separate,
+deliberate decision.
 
 ## Removed in this cleanup
 
@@ -110,3 +143,14 @@ their names were absent from `.gitignore`:
 | `scripts/build_gcc.sh` | superseded by `scripts/build.sh` |
 | `scripts/gen_rag.py` | hardcoded `C:/Users/sulaimanalshammari/...`; rewrote `Core_CPP/casper_rag.c` from byte literals and stopped after the header, truncating the file |
 | `scripts/fix_rag.py` | hardcoded path; both substitutions it applied are already present in the committed source |
+| `Core_CPP/casper_search.h` | 7054 B. `casper_search`, `casper_build_context`, `casper_ctx_free`, `casper_ctx_to_json` and `casper_search_available` were declared, implemented nowhere, and referenced by no source file: `grep -rn casper_search --include='*.c'` returned 0, and a second pass over `*.h`, `*.cs`, `*.html`, `*.ps1` and `*.md` returned only this document's own note |
+
+## Known defects, not yet fixed
+
+| Where | Defect |
+| --- | --- |
+| `Core_CPP/casper_rag.c` vs `Core_CPP/casper_cli.c` | two JSON serialisers. `casper_rag_to_json` emits `query, confidence, elapsed_ms, chain_hash, n_sources, n_steps`; the CLI emits those plus `answer`, `proof` and `sources[]` |
+| `Core_CPP/casper_rag.c` | `score_rel` uses `strtok`, which is not reentrant |
+| `niyah_engine_local/server.js` | `Access-Control-Allow-Origin: *` next to `GET /fetch?url=`, which is an open proxy if the service is ever exposed |
+| `Math_ASM/avx_mult.asm` | in no build target |
+| `README.md`, `AGENTS.md`, `CLAUDE.md` | still claim "no external runtime dependencies" beside an Express service, and still name the deleted `build_gcc.sh` |

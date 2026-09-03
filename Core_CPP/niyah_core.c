@@ -12,24 +12,6 @@
 #include <stdint.h>
 #include <limits.h>
 
-#if defined(_MSC_VER)
-#include <windows.h>
-static double niyah_monotonic_ms(void) {
-    static LARGE_INTEGER freq = {0};
-    LARGE_INTEGER now;
-    if (freq.QuadPart == 0) QueryPerformanceFrequency(&freq);
-    QueryPerformanceCounter(&now);
-    return (double)now.QuadPart * 1000.0 / (double)freq.QuadPart;
-}
-#else
-static double niyah_monotonic_ms(void) {
-    struct timespec t;
-    if (clock_gettime(CLOCK_MONOTONIC, &t) != 0)
-        return (double)clock() * 1000.0 / (double)CLOCKS_PER_SEC;
-    return (double)t.tv_sec * 1000.0 + (double)t.tv_nsec / 1000000.0;
-}
-#endif
-
 #if defined(__AVX2__) && defined(__FMA__)
 #  include <immintrin.h>
 #  define SIMD_AVX2 1
@@ -96,7 +78,10 @@ static float dot_f32(const float * restrict a,const float * restrict b,size_t n)
 }
 
 static void rmsnorm(float * restrict out,const float * restrict x,const float * restrict w,size_t n,float eps){
-    if(n==0u) return; float ss=dot_f32(x,x,n);float scale=1.0f/sqrtf(ss/(float)n+eps);for(size_t k=0;k<n;k++)out[k]=x[k]*scale*w[k];
+    if (n == 0u) return;
+    const float ss = dot_f32(x, x, n);
+    const float scale = 1.0f / sqrtf(ss / (float)n + eps);
+    for (size_t k = 0; k < n; k++) out[k] = x[k] * scale * w[k];
 }
 static inline float silu(float v){return v/(1.0f+expf(-v));}
 static void rope(float*qk,uint32_t pos,uint32_t head_dim,float theta){for(uint32_t i=0;i+1<head_dim;i+=2){float angle=(float)pos/powf(theta,(float)i/(float)head_dim);float c=cosf(angle),s=sinf(angle),v0=qk[i],v1=qk[i+1];qk[i]=v0*c-v1*s;qk[i+1]=v0*s+v1*c;}}
