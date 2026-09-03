@@ -152,8 +152,13 @@ void       niyah_adam_free (NiyahAdam *opt);
 const char *niyah_simd_name(void);      /* "AVX2+FMA" | "NEON" | "Scalar" */
 size_t      niyah_param_count(const NiyahModel *m);
 
-/* Smoke test — returns failed-assertion count (0 = all pass) */
-int niyah_smoke(void);
+/*
+ * niyah_smoke() used to be declared here. It was merged into
+ * Niyah.Engine / NiyahKernel and is defined in no translation unit of this
+ * repository, so keeping the declaration made every target that links
+ * niyah_core.c fail at `undefined reference to niyah_smoke`. The engine
+ * self-check now lives in Core_CPP/niyah_main.c and builds as build/niyah.
+ */
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * Hybrid neuro-symbolic API

@@ -124,7 +124,8 @@ char *niyah_hybrid_generate(NiyahModel *m, const char *prompt,
 
 static int run_all_smoke(void) {
     int total_fail = 0;
-    total_fail += niyah_smoke();
+    /* niyah_smoke() was merged into Niyah.Engine / NiyahKernel and is defined
+     * nowhere here; the core self-check is build/niyah. */
     total_fail += niyah_sym_smoke();
     total_fail += niyah_csp_smoke();
     total_fail += niyah_rule_smoke();

@@ -7,9 +7,10 @@
  *   3. Train step              (1 batch of 16 tokens)
  *
  * Build:
- *   gcc -O3 -mavx2 -mfma -march=native -std=c11
- *       -Wall -Wextra -Werror -I include
- *       bench/bench_niyah.c Core_CPP/niyah_core.c -o build/bench_niyah -lm
+ *   bash scripts/build.sh --bench
+ * which compiles Core_CPP/bench_niyah.c with Core_CPP/niyah_core.c into
+ * build/bench_niyah. Correctness is not checked here; build/niyah
+ * (Core_CPP/niyah_main.c) is the self-check.
  */
 #define _GNU_SOURCE
 #include "niyah_core.h"
@@ -222,13 +223,9 @@ int main(void) {
     printf("╘══════════════════════════════════════════════════════════════════╛\n");
     printf("\nSIMD path active: %s\n\n", niyah_simd_name());
 
-    /* Run smoke test to validate correctness */
-    printf("─── Smoke test ─────────────────────────────────────\n");
-    int fail = niyah_smoke();
-    if (fail == 0)
-        printf("SMOKE PASS — all assertions green ✓\n\n");
-    else
-        printf("SMOKE FAIL — %d assertions failed\n\n", fail);
-
-    return fail;
+    /* Correctness lives in build/niyah (Core_CPP/niyah_main.c). The old
+     * niyah_smoke() call was removed here: that symbol was merged into
+     * Niyah.Engine / NiyahKernel and this repository defines it nowhere, so
+     * linking bench_niyah always failed. */
+    return 0;
 }
