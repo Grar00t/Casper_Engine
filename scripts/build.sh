@@ -177,17 +177,18 @@ build_target niyah_hybrid \
     "$CORE/rule_parser.c" "$CORE/proof_generator.c" \
     "$CORE/khz_q_svd.c" "$CORE/casper_rag.c" "$ROOT/tokenizer.c"
 
-# casper_cli links tokenizer.c too: the old script omitted it here but
-# included it for niyah_hybrid, an asymmetry with no stated reason.
+# casper_cli.c includes casper_rag.h, rule_parser.h and proof_generator.h
+# only, and calls no tokenizer function, so tokenizer.c is deliberately not
+# linked here.
 build_target casper \
     "$CORE/casper_cli.c" "$CORE/casper_rag.c" "$CORE/rule_parser.c" \
-    "$CORE/proof_generator.c" "$CORE/khz_q_svd.c" "$ROOT/tokenizer.c"
+    "$CORE/proof_generator.c" "$CORE/khz_q_svd.c"
 
 if [[ -f "$CORE/bench_niyah.c" ]]; then
     build_target bench_niyah "$CORE/bench_niyah.c" "$CORE/niyah_core.c"
 fi
 
-# Tokenizer round-trip test: fails the build if Arabic decodes to '?'.
+# Tokenizer round-trip test: fails the build if any character decodes to '?'.
 printf '%-16s' "tokenizer_test"
 # shellcheck disable=SC2086
 "$CC" $CFLAGS -DTOKENIZER_TEST "$ROOT/tokenizer.c" -o "$BUILD/tokenizer_test" $LDFLAGS

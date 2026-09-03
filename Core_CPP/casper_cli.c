@@ -25,6 +25,23 @@ static void json_str(FILE *fp, const char *s) {
     fputc('"', fp);
 }
 
+/*
+ * Backend selection.
+ *
+ * This used to be RAG_BACKEND_DDG, hardcoded at the single call site, so
+ * every invocation scraped html.duckduckgo.com with no way to switch. Set
+ * CASPER_BACKEND=searxng (or bing) to point somewhere else without a rebuild.
+ */
+static RagBackend pick_backend(void) {
+    const char *name = getenv("CASPER_BACKEND");
+    if (!name || !name[0]) return RAG_BACKEND_DDG;
+    if (!strcmp(name, "searxng")) return RAG_BACKEND_SEARXNG;
+    if (!strcmp(name, "bing"))    return RAG_BACKEND_BING;
+    if (!strcmp(name, "ddg"))     return RAG_BACKEND_DDG;
+    fprintf(stderr, "[casper] unknown CASPER_BACKEND=%s (ddg|bing|searxng), using ddg\n", name);
+    return RAG_BACKEND_DDG;
+}
+
 static int cmd_verify(const char *proof_path) {
     FILE *fp=fopen(proof_path,"r");
     if(!fp){fprintf(stderr,"[casper] cannot open proof file: %s\n",proof_path);return 3;}
@@ -52,10 +69,11 @@ int main(int argc,char **argv){
 
     const char *query=argv[1];
     const char *rules_path=argc>=3?argv[2]:NULL;
-    RagCtx *ctx=casper_rag_query(query,RAG_BACKEND_DDG,rules_path);
+    RagCtx *ctx=casper_rag_query(query,pick_backend(),rules_path);
     if(!ctx){printf("{\"error\":\"rag allocation failure\"}\n");return 2;}
     if(ctx->n_results<=0){
-        printf("{\"query\":");json_str(stdout,query);printf(",\"error\":\"no results — offline or no match\",\"confidence\":0.0}\n");
+        /* ASCII only: an em-dash here is what produced the mojibake. */
+        printf("{\"query\":");json_str(stdout,query);printf(",\"error\":\"no results - offline or no match\",\"confidence\":0.0}\n");
         casper_rag_free(ctx); return 2;
     }
 
