@@ -54,19 +54,82 @@ static bool hex_to_hash(const char *s,uint8_t h[32]){if(!s||strlen(s)!=64u)retur
 void niyah_proof_generate(const char *prompt,const char *output,const char *rule_file,uint8_t proof[32]){
     SHA256_CTX c;uint8_t sep=0;sha256_init(&c);if(prompt)sha256_update(&c,(const uint8_t*)prompt,strlen(prompt));sha256_update(&c,&sep,1);if(output)sha256_update(&c,(const uint8_t*)output,strlen(output));sha256_update(&c,&sep,1);if(rule_file)sha256_update(&c,(const uint8_t*)rule_file,strlen(rule_file));sha256_final(&c,proof);}
 
+/*
+ * Reformatted only. -Wmisleading-indentation rejected three lines that packed a
+ * full statement after an unbraced if on the same line; the logic below is the
+ * same statement sequence in the same order.
+ */
 int niyah_proof_save(const char *path,const uint8_t proof[32],const char *prompt,const char *output,const char *rule_file){
-    if(!path||!proof)return -1;FILE *f=fopen(path,"w");if(!f)return -1;char hex[65];uint8_t h[32];
-    fprintf(f,"NIYAH-PROOF-V1\n");niyah_hash_to_hex(proof,hex);fprintf(f,"hash: %s\n",hex);
-    if(prompt){niyah_sha256((const uint8_t*)prompt,strlen(prompt),h);niyah_hash_to_hex(h,hex);}else{memset(hex,'0',64);hex[64]='\0';}fprintf(f,"prompt_hash: %s\n",hex);
-    if(output){niyah_sha256((const uint8_t*)output,strlen(output),h);niyah_hash_to_hex(h,hex);}else{memset(hex,'0',64);hex[64]='\0';}fprintf(f,"output_hash: %s\n",hex);
-    if(rule_file){niyah_sha256((const uint8_t*)rule_file,strlen(rule_file),h);niyah_hash_to_hex(h,hex);}else{memset(hex,'0',64);hex[64]='\0';}fprintf(f,"rules_hash: %s\n",hex);
-    if(prompt)fprintf(f,"prompt: %s\n",prompt);if(output)fprintf(f,"output: %s\n",output);
-    int rc=ferror(f)?-1:0;if(fclose(f)!=0)rc=-1;return rc;}
+    if (!path || !proof) return -1;
+    FILE *f = fopen(path, "w");
+    if (!f) return -1;
+
+    char hex[65];
+    uint8_t h[32];
+
+    fprintf(f, "NIYAH-PROOF-V1\n");
+    niyah_hash_to_hex(proof, hex);
+    fprintf(f, "hash: %s\n", hex);
+
+    if (prompt) {
+        niyah_sha256((const uint8_t*)prompt, strlen(prompt), h);
+        niyah_hash_to_hex(h, hex);
+    } else {
+        memset(hex, '0', 64);
+        hex[64] = '\0';
+    }
+    fprintf(f, "prompt_hash: %s\n", hex);
+
+    if (output) {
+        niyah_sha256((const uint8_t*)output, strlen(output), h);
+        niyah_hash_to_hex(h, hex);
+    } else {
+        memset(hex, '0', 64);
+        hex[64] = '\0';
+    }
+    fprintf(f, "output_hash: %s\n", hex);
+
+    if (rule_file) {
+        niyah_sha256((const uint8_t*)rule_file, strlen(rule_file), h);
+        niyah_hash_to_hex(h, hex);
+    } else {
+        memset(hex, '0', 64);
+        hex[64] = '\0';
+    }
+    fprintf(f, "rules_hash: %s\n", hex);
+
+    if (prompt) fprintf(f, "prompt: %s\n", prompt);
+    if (output) fprintf(f, "output: %s\n", output);
+
+    int rc = ferror(f) ? -1 : 0;
+    if (fclose(f) != 0) rc = -1;
+    return rc;
+}
 
 bool niyah_proof_verify(const char *proof_path,const char *prompt,const char *output,const char *rule_file){
-    if(!proof_path)return false;FILE*f=fopen(proof_path,"r");if(!f)return false;char line[4096],stored[65]={0};
-    while(fgets(line,sizeof(line),f)){if(!strncmp(line,"hash: ",6)){size_t l=strcspn(line+6,"\r\n");if(l==64u){memcpy(stored,line+6,64);stored[64]='\0';}break;}}fclose(f);
-    uint8_t expected[32],actual[32];if(!hex_to_hash(stored,expected))return false;niyah_proof_generate(prompt,output,rule_file,actual);return memcmp(expected,actual,32)==0;}
+    if (!proof_path) return false;
+    FILE *f = fopen(proof_path, "r");
+    if (!f) return false;
+
+    char line[4096];
+    char stored[65] = {0};
+    while (fgets(line, sizeof(line), f)) {
+        if (!strncmp(line, "hash: ", 6)) {
+            size_t l = strcspn(line + 6, "\r\n");
+            if (l == 64u) {
+                memcpy(stored, line + 6, 64);
+                stored[64] = '\0';
+            }
+            break;
+        }
+    }
+    fclose(f);
+
+    uint8_t expected[32], actual[32];
+    if (!hex_to_hash(stored, expected)) return false;
+    niyah_proof_generate(prompt, output, rule_file, actual);
+    return memcmp(expected, actual, 32) == 0;
+}
 
 int niyah_proof_smoke(void){
     int fail=0;uint8_t h[32];char hex[65];niyah_sha256((const uint8_t*)"",0,h);niyah_hash_to_hex(h,hex);if(strncmp(hex,"e3b0c44298fc1c14",16))++fail;

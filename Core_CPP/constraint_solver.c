@@ -19,9 +19,9 @@
 #include <string.h>
 #include <assert.h>
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * §0  Rational arithmetic
- * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
 static int64_t i64_abs(int64_t x) { return x < 0 ? -x : x; }
 
@@ -50,10 +50,9 @@ NiyahCspRat niyah_csp_rat(int64_t num, int64_t den) {
  * Cross-reduce a/b op c/d before multiplying to keep products in range.
  * For add/sub we additionally pre-reduce the common denominator.
  *
- * For rat_cmp we use __int128 where available (GCC/Clang) to avoid
- * the product overflowing; on MSVC we fall back to double comparison
- * which is safe because normalized denominators guarantee the values
- * differ by more than 1 ULP when they are not equal.
+ * For rat_cmp we use __int128 where the target has it to avoid the product
+ * overflowing; elsewhere we fall back to double comparison, which is exact
+ * only while both products fit in a 53-bit mantissa.
  */
 
 NiyahCspRat niyah_csp_rat_add(NiyahCspRat a, NiyahCspRat b) {
@@ -97,17 +96,29 @@ int niyah_csp_rat_cmp(NiyahCspRat a, NiyahCspRat b) {
     /*
      * Compare a.num/a.den vs b.num/b.den without overflow.
      * Cross-multiply:  a.num * b.den  vs  b.num * a.den
-     * Use __int128 where the compiler supports it; otherwise fall back
-     * to double (safe for normalized small-denominator rationals).
+     *
+     * __int128 is a GNU/Clang extension, not ISO C, so -Wpedantic rejects it
+     * and this tree builds with -Werror. Exactness is the entire purpose of
+     * this function, so the extension stays and the diagnostic is silenced
+     * for these two declarations only. __SIZEOF_INT128__ is the feature test;
+     * __GNUC__ is not, because 32-bit and clang-cl targets define the vendor
+     * macro without providing a 128-bit integer.
      */
-#if defined(__GNUC__) || defined(__clang__)
+#if defined(__SIZEOF_INT128__)
+#  if defined(__GNUC__)
+#    pragma GCC diagnostic push
+#    pragma GCC diagnostic ignored "-Wpedantic"
+#  endif
     __int128 lhs = (__int128)a.num * b.den;
     __int128 rhs = (__int128)b.num * a.den;
     if (lhs < rhs) return -1;
     if (lhs > rhs) return  1;
     return 0;
+#  if defined(__GNUC__)
+#    pragma GCC diagnostic pop
+#  endif
 #else
-    /* MSVC / other: use double; exact for values that fit in 53-bit mantissa */
+    /* No 128-bit integer: use double; exact only within a 53-bit mantissa */
     double lhsd = (double)a.num * (double)b.den;
     double rhsd = (double)b.num * (double)a.den;
     if (lhsd < rhsd) return -1;
@@ -124,9 +135,9 @@ double niyah_csp_rat_to_double(NiyahCspRat r) {
     return (double)r.num / (double)r.den;
 }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * §1  System management
- * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
 void niyah_csp_init(NiyahCspSystem *sys, uint32_t n_vars) {
     assert(n_vars <= NIYAH_CSP_MAX_VARS);
@@ -140,9 +151,9 @@ bool niyah_csp_add(NiyahCspSystem *sys, NiyahCspConstraint c) {
     return true;
 }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * §2  Constraint evaluation
- * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
 /* Evaluate LHS = sum(coeff[i] * values[var_id[i]]) */
 static NiyahCspRat eval_lhs(const NiyahCspConstraint *c,
@@ -182,7 +193,7 @@ static bool all_satisfied(const NiyahCspSystem *sys,
     return true;
 }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * §3  Bounds propagation solver
  *
  * For small systems: compute tight bounds for each variable
@@ -191,7 +202,7 @@ static bool all_satisfied(const NiyahCspSystem *sys,
  *
  * This is sufficient for the constraint sizes used in symbolic
  * reasoning (~2-8 variables, ~4-16 constraints).
- * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
 /* Large default bounds for unconstrained variables */
 #define DEFAULT_LO ((NiyahCspRat){-10000, 1})
@@ -335,9 +346,9 @@ bool niyah_csp_solve(const NiyahCspSystem *sys, NiyahCspRat *values) {
     return all_satisfied(sys, values);
 }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * §4  Smoke test
- * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
 #define CSP_PASS(cond, label) do { \
     if (cond) { pass++; fprintf(stderr, "  [PASS] %s\n", label); } \
@@ -506,9 +517,9 @@ int niyah_csp_smoke(void) {
     return fail;
 }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * §5  Standalone test entry point
- * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
 #ifdef CSP_STANDALONE_TEST
 int main(void) {
